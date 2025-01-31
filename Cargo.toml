@@ -1,0 +1,15 @@
+[package]
+name = "mockchain-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.9.0"
+env_logger = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+litesvm = "0.5.0"
+solana-program = "2.1.11"
+solana-sdk = "2.1.11"
+actix-cors = "0.7.0"
