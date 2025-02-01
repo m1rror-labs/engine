@@ -17,3 +17,4 @@ base64 = "0.22.1"
 solana-compute-budget = "2.1.11"
 diesel = { version = "2.2.0", features = ["postgres"] }
 dotenvy = "0.15"
+dotenv = "0.15.0"
