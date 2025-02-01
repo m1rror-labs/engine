@@ -7,3 +7,4 @@ pub mod get_version;
 pub mod is_blockhash_valid;
 pub mod request_airdrop;
 pub mod rpc;
+pub mod send_transaction;

@@ -6,14 +6,16 @@ use std::{
 use litesvm::LiteSVM;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use solana_sdk::{hash::Hash, pubkey::Pubkey, signature::Signature};
+use solana_sdk::{
+    hash::Hash, pubkey::Pubkey, signature::Signature, transaction::VersionedTransaction,
+};
 
 use super::{
     get_account_info::get_account_info, get_balance::get_balance, get_health::get_health,
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_version::get_version, is_blockhash_valid::is_blockhash_valid,
-    request_airdrop::request_airdrop,
+    request_airdrop::request_airdrop, send_transaction::send_transaction,
 };
 
 #[derive(Deserialize, Debug)]
@@ -284,10 +286,7 @@ pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
             "message": "Method not found",
         })),
         RpcMethod::RequestAirdrop => request_airdrop(&req, deps),
-        RpcMethod::SendTransaction => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::SendTransaction => send_transaction(&req, deps),
         RpcMethod::SimulateTransaction => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
@@ -336,6 +335,16 @@ pub fn parse_hash(hash_str: &str) -> Result<Hash, Value> {
         Err(_) => Err(serde_json::json!({
             "code": -32602,
             "message": "Invalid params: unable to parse hash",
+        })),
+    }
+}
+
+pub fn parse_tx(tx_str: Value) -> Result<VersionedTransaction, Value> {
+    match VersionedTransaction::deserialize(tx_str) {
+        Ok(pk) => Ok(pk),
+        Err(_) => Err(serde_json::json!({
+            "code": -32602,
+            "message": "Invalid params: unable to parse tx",
         })),
     }
 }
