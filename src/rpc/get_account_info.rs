@@ -25,6 +25,7 @@ pub fn get_account_info(req: &RpcRequest, deps: &Dependencies) -> Result<Value, 
                 "lamports": account.lamports,
                 "owner": account.owner.to_string(),
                 "rentEpoch": account.rent_epoch,
+                "space": account.data.len(),
             },
         }))
     } else {
