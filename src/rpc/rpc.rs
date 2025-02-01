@@ -13,6 +13,7 @@ use super::{
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_version::get_version, is_blockhash_valid::is_blockhash_valid,
+    request_airdrop::request_airdrop,
 };
 
 #[derive(Deserialize, Debug)]
@@ -282,10 +283,7 @@ pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::RequestAirdrop => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::RequestAirdrop => request_airdrop(&req, deps),
         RpcMethod::SendTransaction => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",

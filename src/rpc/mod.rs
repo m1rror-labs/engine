@@ -5,4 +5,5 @@ pub mod get_latest_blockhash;
 pub mod get_minimum_balance_for_rent_exemption;
 pub mod get_version;
 pub mod is_blockhash_valid;
+pub mod request_airdrop;
 pub mod rpc;
