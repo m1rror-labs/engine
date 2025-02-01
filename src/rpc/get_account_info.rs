@@ -1,67 +1,36 @@
-use std::str::FromStr;
+use serde_json::Value;
 
-use solana_sdk::pubkey::Pubkey;
+use super::rpc::{parse_pubkey, Dependencies, RpcRequest};
 
-use super::rpc::{Dependencies, RpcRequest, RpcResponse};
-
-pub fn get_account_info(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
+pub fn get_account_info(req: &RpcRequest, deps: &Dependencies) -> Result<Value, Value> {
     let pubkey_str = match req.params.get(0).and_then(|v| v.as_str()) {
         Some(s) => s,
         None => {
-            return RpcResponse {
-                jsonrpc: req.jsonrpc.clone(),
-                id: req.id.clone(),
-                result: None,
-                error: Some(serde_json::json!({
-                    "code": -32602,
-                    "message": "`params` should have at least 1 argument(s)"
-                })),
-            };
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": "`params` should have at least 1 argument(s)"
+            }));
         }
     };
-    let pubkey = match Pubkey::from_str(pubkey_str) {
-        Ok(pk) => pk,
-        Err(_) => {
-            return RpcResponse {
-                jsonrpc: req.jsonrpc.clone(),
-                id: req.id.clone(),
-                result: None,
-                error: Some(serde_json::json!({
-                    "code": -32602,
-                    "message": "Invalid params: unable to parse pubkey",
-                })),
-            };
-        }
-    };
+    let pubkey = parse_pubkey(pubkey_str)?;
 
     let lite_svm = deps.lite_svm.read().unwrap();
 
     if let Some(account) = lite_svm.get_account(&pubkey) {
-        RpcResponse {
-            jsonrpc: req.jsonrpc,
-            id: req.id,
-            result: Some(serde_json::json!({
-                "context": { "apiVersion": "2.0.15", "slot": 341197053 },
-                "value": {
-                    "data": account.data,
-                    "executable": account.executable,
-                    "lamports": account.lamports,
-                    "owner": account.owner.to_string(),
-                    "rentEpoch": account.rent_epoch,
-                },
-            })),
-            error: None,
-        }
+        Ok(serde_json::json!({
+            "context": { "apiVersion": "2.0.15", "slot": 341197053 },
+            "value": {
+                "data": account.data,
+                "executable": account.executable,
+                "lamports": account.lamports,
+                "owner": account.owner.to_string(),
+                "rentEpoch": account.rent_epoch,
+            },
+        }))
     } else {
-        print!("Account not found");
-        RpcResponse {
-            jsonrpc: req.jsonrpc,
-            id: req.id,
-            result: Some(serde_json::json!({
-                "context": { "apiVersion": "2.0.15", "slot": 341197053 },
-                "value": null,
-            })),
-            error: None,
-        }
+        Ok(serde_json::json!({
+            "context": { "apiVersion": "2.0.15", "slot": 341197053 },
+            "value": null,
+        }))
     }
 }

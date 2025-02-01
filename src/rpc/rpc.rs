@@ -1,7 +1,12 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    str::FromStr,
+    sync::{Arc, RwLock},
+};
 
 use litesvm::LiteSVM;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use solana_sdk::pubkey::Pubkey;
 
 use super::{get_account_info::get_account_info, get_balance::get_balance};
 
@@ -44,8 +49,33 @@ impl Dependencies {
 }
 
 pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
-    match req.method {
-        RpcMethod::GetAccountInfo => get_account_info(req, deps),
-        RpcMethod::GetBalance => get_balance(req),
+    let result = match req.method {
+        RpcMethod::GetAccountInfo => get_account_info(&req, deps),
+        RpcMethod::GetBalance => get_balance(&req, deps),
+    };
+
+    match result {
+        Ok(r) => RpcResponse {
+            jsonrpc: req.jsonrpc,
+            id: req.id,
+            result: Some(r),
+            error: None,
+        },
+        Err(e) => RpcResponse {
+            jsonrpc: req.jsonrpc,
+            id: req.id,
+            result: None,
+            error: Some(e),
+        },
+    }
+}
+
+pub fn parse_pubkey(pubkey_str: &str) -> Result<Pubkey, Value> {
+    match Pubkey::from_str(pubkey_str) {
+        Ok(pk) => Ok(pk),
+        Err(_) => Err(serde_json::json!({
+            "code": -32602,
+            "message": "Invalid params: unable to parse pubkey",
+        })),
     }
 }
