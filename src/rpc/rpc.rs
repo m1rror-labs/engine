@@ -6,11 +6,13 @@ use std::{
 use litesvm::LiteSVM;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use solana_sdk::{pubkey::Pubkey, signature::Signature};
+use solana_sdk::{hash::Hash, pubkey::Pubkey, signature::Signature};
 
 use super::{
     get_account_info::get_account_info, get_balance::get_balance, get_health::get_health,
+    get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
+    get_version::get_version, is_blockhash_valid::is_blockhash_valid,
 };
 
 #[derive(Deserialize, Debug)]
@@ -182,10 +184,7 @@ pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetLatestBlockhash => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetLatestBlockhash => get_latest_blockhash(deps),
         RpcMethod::GetLeaderSchedule => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
@@ -273,18 +272,12 @@ pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetVersion => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetVersion => get_version(),
         RpcMethod::GetVoteAccounts => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::IsBlockhashValid => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::IsBlockhashValid => is_blockhash_valid(&req, deps),
         RpcMethod::MinimumLedgerSlot => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
@@ -335,6 +328,16 @@ pub fn parse_signature(sig_str: &str) -> Result<Signature, Value> {
         Err(_) => Err(serde_json::json!({
             "code": -32602,
             "message": "Invalid params: unable to parse signature",
+        })),
+    }
+}
+
+pub fn parse_hash(hash_str: &str) -> Result<Hash, Value> {
+    match Hash::from_str(hash_str) {
+        Ok(pk) => Ok(pk),
+        Err(_) => Err(serde_json::json!({
+            "code": -32602,
+            "message": "Invalid params: unable to parse hash",
         })),
     }
 }
