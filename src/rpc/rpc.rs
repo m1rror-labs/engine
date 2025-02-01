@@ -6,7 +6,7 @@ use std::{
 use litesvm::LiteSVM;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use solana_sdk::pubkey::Pubkey;
+use solana_sdk::{pubkey::Pubkey, signature::Signature};
 
 use super::{
     get_account_info::get_account_info, get_balance::get_balance, get_health::get_health,
@@ -325,6 +325,16 @@ pub fn parse_pubkey(pubkey_str: &str) -> Result<Pubkey, Value> {
         Err(_) => Err(serde_json::json!({
             "code": -32602,
             "message": "Invalid params: unable to parse pubkey",
+        })),
+    }
+}
+
+pub fn parse_signature(sig_str: &str) -> Result<Signature, Value> {
+    match Signature::from_str(sig_str) {
+        Ok(pk) => Ok(pk),
+        Err(_) => Err(serde_json::json!({
+            "code": -32602,
+            "message": "Invalid params: unable to parse signature",
         })),
     }
 }
