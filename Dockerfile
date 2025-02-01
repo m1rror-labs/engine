@@ -14,13 +14,16 @@ COPY src ./src
 RUN cargo build --release
 
 # Use a minimal base image for the final stage
-FROM debian:buster-slim
+FROM debian:bookworm-slim
+
+# Install OpenSSL
+RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory inside the container
 WORKDIR /usr/src/myapp
 
 # Copy the compiled binary from the builder stage
-COPY --from=builder /usr/src/myapp/target/release .
+COPY --from=builder /usr/src/myapp/target/release/mockchain-engine .
 
 # Expose the port that the application will run on
 EXPOSE 8080
