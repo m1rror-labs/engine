@@ -21,8 +21,6 @@ async fn main() -> std::io::Result<()> {
 
     let deps = Dependencies::new(svm);
 
-    let ip = env::var("SERVER_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(deps.clone())) // Share dependencies
