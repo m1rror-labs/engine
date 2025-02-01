@@ -20,7 +20,7 @@ FROM debian:buster-slim
 WORKDIR /usr/src/myapp
 
 # Copy the compiled binary from the builder stage
-COPY --from=builder /usr/src/myapp/target/release/myapp .
+COPY --from=builder /usr/src/myapp/target/release .
 
 # Expose the port that the application will run on
 EXPOSE 8080
