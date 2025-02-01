@@ -14,3 +14,6 @@ solana-program = "2.1.11"
 solana-sdk = "2.1.11"
 actix-cors = "0.7.0"
 base64 = "0.22.1"
+solana-compute-budget = "2.1.11"
+diesel = { version = "2.2.0", features = ["postgres"] }
+dotenvy = "0.15"
