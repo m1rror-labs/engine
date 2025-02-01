@@ -26,4 +26,4 @@ COPY --from=builder /usr/src/myapp/target/release .
 EXPOSE 8080
 
 # Set the entrypoint to run the application
-CMD ["./myapp"]
+CMD ["./mockchain-engine"]
