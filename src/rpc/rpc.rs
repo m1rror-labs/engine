@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 
-use super::{get_account_info::get_account_info, get_balance::get_balance};
+use super::{
+    get_account_info::get_account_info, get_balance::get_balance, get_health::get_health,
+    get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
+};
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -72,7 +75,7 @@ pub struct RpcRequest {
     pub jsonrpc: String,
     pub id: serde_json::Value,
     pub method: RpcMethod,
-    pub params: serde_json::Value,
+    pub params: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Debug)]
@@ -154,10 +157,7 @@ pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetHealth => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetHealth => get_health(),
         RpcMethod::GetHighestSnapshotSlot => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
@@ -198,10 +198,9 @@ pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetMinimumBalanceForRentExemption => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetMinimumBalanceForRentExemption => {
+            get_minimum_balance_for_rent_exemption(&req, deps)
+        }
         RpcMethod::GetMultipleAccounts => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",

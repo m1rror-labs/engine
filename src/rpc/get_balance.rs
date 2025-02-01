@@ -3,7 +3,12 @@ use serde_json::Value;
 use super::rpc::{parse_pubkey, Dependencies, RpcRequest};
 
 pub fn get_balance(req: &RpcRequest, deps: &Dependencies) -> Result<Value, Value> {
-    let pubkey_str = match req.params.get(0).and_then(|v| v.as_str()) {
+    let pubkey_str = match req
+        .params
+        .as_ref()
+        .and_then(|params| params.get(0))
+        .and_then(|v| v.as_str())
+    {
         Some(s) => s,
         None => {
             return Err(serde_json::json!({

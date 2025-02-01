@@ -17,7 +17,7 @@ fn test_no_params() {
         jsonrpc: "2.0".to_string(),
         id: Value::Number(1.into()),
         method: RpcMethod::GetAccountInfo,
-        params: serde_json::json!([]),
+        params: Some(serde_json::json!([])),
     };
     let deps = Dependencies {
         lite_svm: Arc::new(RwLock::new(LiteSVM::new())),
@@ -38,7 +38,7 @@ fn test_bad_pubkey() {
         jsonrpc: "2.0".to_string(),
         id: Value::Number(1.into()),
         method: RpcMethod::GetAccountInfo,
-        params: serde_json::json!(["bad pubkey"]),
+        params: Some(serde_json::json!(["Bad pubkey"])),
     };
     let deps = Dependencies {
         lite_svm: Arc::new(RwLock::new(LiteSVM::new())),
@@ -59,7 +59,9 @@ fn test_uninitalized_account() {
         jsonrpc: "2.0".to_string(),
         id: Value::Number(1.into()),
         method: RpcMethod::GetAccountInfo,
-        params: serde_json::json!(["83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"]),
+        params: Some(serde_json::json!([
+            "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"
+        ])),
     };
     let deps = Dependencies {
         lite_svm: Arc::new(RwLock::new(LiteSVM::new())),
@@ -83,7 +85,9 @@ fn test_initialized_account() {
         jsonrpc: "2.0".to_string(),
         id: Value::Number(1.into()),
         method: RpcMethod::GetAccountInfo,
-        params: serde_json::json!(["83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"]),
+        params: Some(serde_json::json!([
+            "83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri"
+        ])),
     };
     let pubkey = Pubkey::from_str("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri").unwrap();
     let mut svm = LiteSVM::new();
