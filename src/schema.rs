@@ -40,7 +40,7 @@ table! {
     transaction_account_keys (id) {
         id -> Uuid,
         created_at -> Timestamp,
-        transaction_signature -> Bytea,
+        transaction_signature -> Text,
         account -> Text,
         signer -> Bool,
         writable -> Bool,
@@ -52,7 +52,7 @@ table! {
     transaction_instructions (id) {
         id -> Uuid,
         created_at -> Timestamp,
-        transaction_signature -> Bytea,
+        transaction_signature -> Text,
         accounts -> Array<BigInt>,
         data -> Bytea,
         program_id -> Bytea,
@@ -75,7 +75,7 @@ table! {
     transaction_meta (id) {
         id -> Uuid,
         created_at -> Timestamp,
-        transaction_signature -> Bytea,
+        transaction_signature -> Text,
         err -> Nullable<Text>,
         compute_units_consumed -> BigInt,
         fee -> BigInt,
