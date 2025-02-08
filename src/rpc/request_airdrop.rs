@@ -43,13 +43,4 @@ pub fn request_airdrop<T: Storage + Clone>(
         "code": -32602,
         "message": "Failed to airdrop",
     }))
-
-    // let mut svm = deps.svm.write().unwrap();
-    // match svm.airdrop(&pubkey, lamports) {
-    //     Ok(res) => Ok(serde_json::json!(res.signature.to_string())),
-    //     Err(_) => Err(serde_json::json!({
-    //         "code": -32602,
-    //         "message": "Failed to airdrop",
-    //     })),
-    // }
 }

@@ -1,7 +1,13 @@
 use diesel::prelude::*;
+use solana_sdk::{
+    account::ReadableAccount,
+    transaction::{Legacy, TransactionVersion},
+};
 use uuid::Uuid;
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+use crate::engine::transactions::TransactionMetadata;
+
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
 #[diesel(table_name = crate::schema::transactions)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransaction {
@@ -14,7 +20,37 @@ pub struct DbTransaction {
     pub blockchain: Uuid,
 }
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+impl DbTransaction {
+    pub fn from_transaction(blockchain: Uuid, meta: &TransactionMetadata) -> Self {
+        DbTransaction {
+            id: Uuid::new_v4(),
+            created_at: chrono::Utc::now().naive_utc(),
+            signature: meta.tx.signature().to_string(),
+            version: version_to_string(&meta.tx.to_versioned_transaction().version()),
+            recent_blockhash: meta.tx.message().recent_blockhash().to_bytes().to_vec(),
+            slot: meta.current_block.block_height as i64,
+            blockchain,
+        }
+    }
+}
+
+pub fn version_to_string(version: &TransactionVersion) -> String {
+    match version {
+        TransactionVersion::Legacy(_) => "legacy".to_string(),
+        TransactionVersion::Number(v) => format!("v{}", v),
+    }
+}
+
+pub fn string_to_version(version: &str) -> TransactionVersion {
+    if version == "legacy" {
+        TransactionVersion::Legacy(Legacy::Legacy)
+    } else {
+        let v = version.trim_start_matches('v').parse().unwrap();
+        TransactionVersion::Number(v)
+    }
+}
+
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
 #[diesel(table_name = crate::schema::transaction_account_keys)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionAccountKey {
@@ -27,7 +63,27 @@ pub struct DbTransactionAccountKey {
     pub index: i16,
 }
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+impl DbTransactionAccountKey {
+    pub fn from_transaction(meta: &TransactionMetadata) -> Vec<Self> {
+        meta.tx
+            .message()
+            .account_keys()
+            .iter()
+            .enumerate()
+            .map(|(i, account)| DbTransactionAccountKey {
+                id: Uuid::new_v4(),
+                created_at: chrono::Utc::now().naive_utc(),
+                transaction_signature: meta.tx.signature().to_string(),
+                account: account.to_string(),
+                signer: meta.tx.message().is_signer(i),
+                writable: meta.tx.message().is_writable(i),
+                index: i as i16,
+            })
+            .collect()
+    }
+}
+
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
 #[diesel(table_name = crate::schema::transaction_instructions)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionInstruction {
@@ -41,7 +97,27 @@ pub struct DbTransactionInstruction {
     pub inner: bool,
 }
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+impl DbTransactionInstruction {
+    pub fn from_transaction(meta: &TransactionMetadata) -> Vec<Self> {
+        meta.tx
+            .message()
+            .program_instructions_iter()
+            //TODO: I had to imporvise some things, so they may not be perfect
+            .map(|(program_id, instruction)| DbTransactionInstruction {
+                id: Uuid::new_v4(),
+                created_at: chrono::Utc::now().naive_utc(),
+                transaction_signature: meta.tx.signature().to_string(),
+                accounts: instruction.accounts.iter().map(|a| *a as i64).collect(),
+                data: instruction.data.clone(),
+                program_id: program_id.to_bytes().to_vec(),
+                stack_height: 1,
+                inner: false,
+            })
+            .collect()
+    }
+}
+
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
 #[diesel(table_name = crate::schema::transaction_log_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionLogMessage {
@@ -52,7 +128,23 @@ pub struct DbTransactionLogMessage {
     pub index: i16,
 }
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+impl DbTransactionLogMessage {
+    pub fn from_transaction(meta: &TransactionMetadata) -> Vec<Self> {
+        meta.logs
+            .iter()
+            .enumerate()
+            .map(|(i, log)| DbTransactionLogMessage {
+                id: Uuid::new_v4(),
+                created_at: chrono::Utc::now().naive_utc(),
+                transaction_signature: meta.tx.signature().to_string(),
+                log: log.to_string(),
+                index: i as i16,
+            })
+            .collect()
+    }
+}
+
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
 #[diesel(table_name = crate::schema::transaction_meta)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionMeta {
@@ -66,7 +158,30 @@ pub struct DbTransactionMeta {
     pub post_balances: Vec<i64>,
 }
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+impl DbTransactionMeta {
+    pub fn from_transaction(meta: &TransactionMetadata) -> Self {
+        DbTransactionMeta {
+            id: Uuid::new_v4(),
+            created_at: chrono::Utc::now().naive_utc(),
+            transaction_signature: meta.tx.signature().to_string(),
+            err: meta.err.as_ref().map(|e| e.to_string()),
+            compute_units_consumed: meta.compute_units_consumed as i64,
+            fee: meta.tx.message().recent_blockhash().to_bytes()[0] as i64,
+            pre_balances: meta
+                .pre_accounts
+                .iter()
+                .map(|(_, a)| a.lamports() as i64)
+                .collect(),
+            post_balances: meta
+                .post_accounts
+                .iter()
+                .map(|(_, a)| a.lamports() as i64)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
 #[diesel(table_name = crate::schema::transaction_signatures)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionSignature {
@@ -74,4 +189,19 @@ pub struct DbTransactionSignature {
     pub created_at: chrono::NaiveDateTime,
     pub transaction_signature: String,
     pub signature: String,
+}
+
+impl DbTransactionSignature {
+    pub fn from_transaction(meta: &TransactionMetadata) -> Vec<Self> {
+        meta.tx
+            .signatures()
+            .iter()
+            .map(|signature| DbTransactionSignature {
+                id: Uuid::new_v4(),
+                created_at: chrono::Utc::now().naive_utc(),
+                transaction_signature: meta.tx.signature().to_string(),
+                signature: signature.to_string(),
+            })
+            .collect()
+    }
 }

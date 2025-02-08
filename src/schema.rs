@@ -1,4 +1,4 @@
-use diesel::table;
+use diesel::{allow_tables_to_appear_in_same_query, table};
 
 table! {
     accounts (id) {
@@ -35,6 +35,30 @@ table! {
         airdrop_keypair -> Bytea,
     }
 }
+
+table! {
+    transactions (id) {
+        id -> Uuid,
+        created_at -> Timestamp,
+        signature -> Text,
+        version -> Text,
+        recent_blockhash -> Bytea,
+        slot -> BigInt,
+        blockchain -> Uuid,
+    }
+}
+
+allow_tables_to_appear_in_same_query!(
+    transactions,
+    transaction_account_keys,
+    transaction_instructions,
+    transaction_log_messages,
+    transaction_meta,
+    transaction_signatures,
+    accounts,
+    blocks,
+    blockchain,
+);
 
 table! {
     transaction_account_keys (id) {
@@ -90,17 +114,5 @@ table! {
         created_at -> Timestamp,
         transaction_signature -> Text,
         signature -> Text
-    }
-}
-
-table! {
-    transactions (id) {
-        id -> Uuid,
-        created_at -> Timestamp,
-        signature -> Text,
-        version -> Text,
-        recent_blockhash -> Bytea,
-        slot -> BigInt,
-        blockchain -> Uuid,
     }
 }

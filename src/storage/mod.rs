@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use accounts::DbAccount;
 use blocks::DbBlock;
 use diesel::pg::PgConnection;
@@ -7,6 +9,10 @@ use diesel::upsert::excluded;
 
 use solana_sdk::{
     account::Account, hash::Hash, pubkey::Pubkey, signature::Signature, transaction::Transaction,
+};
+use transactions::{
+    DbTransaction, DbTransactionAccountKey, DbTransactionInstruction, DbTransactionLogMessage,
+    DbTransactionMeta, DbTransactionSignature,
 };
 use uuid::Uuid;
 
@@ -206,6 +212,39 @@ impl Storage for PgStorage {
     }
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String> {
+        let mut conn = self.get_connection()?;
+        // save transaction
+        diesel::insert_into(crate::schema::transactions::table)
+            .values(DbTransaction::from_transaction(id, tx))
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+
+        // save transaction account keys
+        diesel::insert_into(crate::schema::transaction_account_keys::table)
+            .values(DbTransactionAccountKey::from_transaction(tx))
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+        // save transaction instructions
+        diesel::insert_into(crate::schema::transaction_instructions::table)
+            .values(DbTransactionInstruction::from_transaction(tx))
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+        // save transaction log messages
+        diesel::insert_into(crate::schema::transaction_log_messages::table)
+            .values(DbTransactionLogMessage::from_transaction(tx))
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+        // save transaction meta
+        diesel::insert_into(crate::schema::transaction_meta::table)
+            .values(DbTransactionMeta::from_transaction(tx))
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+        // save transaction signatures
+        diesel::insert_into(crate::schema::transaction_signatures::table)
+            .values(DbTransactionSignature::from_transaction(tx))
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+
         todo!()
     }
 
@@ -214,6 +253,101 @@ impl Storage for PgStorage {
         id: Uuid,
         signature: &Signature,
     ) -> Result<Option<Transaction>, String> {
-        todo!()
+        let mut conn = self.get_connection()?;
+
+        let res: Vec<(
+            DbTransaction,
+            Option<DbTransactionAccountKey>,
+            Option<DbTransactionInstruction>,
+            Option<DbTransactionLogMessage>,
+            Option<DbTransactionMeta>,
+            Option<DbTransactionSignature>,
+        )> = crate::schema::transactions::table
+            .left_join(
+                crate::schema::transaction_account_keys::table
+                    .on(crate::schema::transactions::signature
+                        .eq(crate::schema::transaction_account_keys::transaction_signature)),
+            )
+            .left_join(
+                crate::schema::transaction_instructions::table
+                    .on(crate::schema::transactions::signature
+                        .eq(crate::schema::transaction_instructions::transaction_signature)),
+            )
+            .left_join(
+                crate::schema::transaction_log_messages::table
+                    .on(crate::schema::transactions::signature
+                        .eq(crate::schema::transaction_log_messages::transaction_signature)),
+            )
+            .left_join(
+                crate::schema::transaction_meta::table.on(crate::schema::transactions::signature
+                    .eq(crate::schema::transaction_meta::transaction_signature)),
+            )
+            .left_join(
+                crate::schema::transaction_signatures::table
+                    .on(crate::schema::transactions::signature
+                        .eq(crate::schema::transaction_signatures::transaction_signature)),
+            )
+            .filter(crate::schema::transactions::signature.eq(signature.to_string()))
+            .filter(crate::schema::transactions::blockchain.eq(id))
+            .load::<(
+                DbTransaction,
+                Option<DbTransactionAccountKey>,
+                Option<DbTransactionInstruction>,
+                Option<DbTransactionLogMessage>,
+                Option<DbTransactionMeta>,
+                Option<DbTransactionSignature>,
+            )>(&mut conn)
+            .map_err(|e| e.to_string())?;
+
+        let mut transaction_map: HashMap<
+            Uuid,
+            (
+                DbTransaction,
+                Vec<DbTransactionAccountKey>,
+                Vec<DbTransactionInstruction>,
+                Vec<DbTransactionLogMessage>,
+                Vec<DbTransactionMeta>,
+                Vec<DbTransactionSignature>,
+            ),
+        > = HashMap::new();
+
+        for (tx, account_key, instruction, log_message, meta, signature) in res {
+            let entry = transaction_map.entry(tx.id).or_insert((
+                tx,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ));
+            if let Some(account_key) = account_key {
+                entry.1.push(account_key);
+            };
+            if let Some(instruction) = instruction {
+                entry.2.push(instruction);
+            };
+            if let Some(log_message) = log_message {
+                entry.3.push(log_message);
+            };
+            if let Some(meta) = meta {
+                entry.4.push(meta);
+            };
+            if let Some(signature) = signature {
+                entry.5.push(signature);
+            };
+        }
+
+        if transaction_map.is_empty() {
+            return Ok(None);
+        }
+
+        if transaction_map.len() > 1 {
+            return Err("Multiple transactions found with the same signature".to_string());
+        }
+
+        let (db_tx, account_keys, instructions, log_messages, metas, signatures) =
+            transaction_map.into_iter().next().unwrap().1;
+
+        Ok(None)
     }
 }

@@ -47,6 +47,7 @@ pub trait SVM<T: Storage + Clone> {
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
     fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
     fn latest_blockhash(&self, id: Uuid) -> Result<String, String>;
+    fn current_block(&self, id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
     fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
     fn send_transaction(&self, id: Uuid, tx: VersionedTransaction) -> Result<String, String>;
@@ -86,6 +87,11 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let block = self.storage.get_latest_block(id)?;
 
         Ok(block.blockhash.to_string())
+    }
+
+    fn current_block(&self, id: Uuid) -> Result<Block, String> {
+        let block = self.storage.get_latest_block(id)?;
+        Ok(block)
     }
 
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64 {
@@ -157,11 +163,12 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
 
         let context = context.unwrap();
         let (signature, return_data, inner_instructions, post_accounts) =
-            execute_tx_helper(tx.clone(), context);
+            execute_tx_helper(tx.clone(), context.clone());
         let Ok(logs) = Rc::try_unwrap(log_collector).map(|lc| lc.into_inner().messages) else {
             unreachable!("Log collector should not be used after send_transaction returns")
         };
 
+        let current_block = self.current_block(id)?;
         let meta = TransactionMetadata {
             signature,
             err: tx_result.err(),
@@ -169,6 +176,24 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             inner_instructions,
             compute_units_consumed: accumulated_consume_units,
             return_data,
+            tx: tx.clone(),
+            current_block,
+            //TODO: This may be wrong
+            pre_accounts: accounts_db
+                .accounts
+                .iter()
+                .map(|(k, v)| {
+                    if let Some(account) = v {
+                        (
+                            k.to_owned().to_owned(),
+                            AccountSharedData::from(account.to_owned()),
+                        )
+                    } else {
+                        (k.to_owned().to_owned(), AccountSharedData::default())
+                    }
+                })
+                .collect(),
+            post_accounts: post_accounts.clone(),
         };
         self.storage.save_transaction(id, &meta)?;
 
@@ -672,7 +697,7 @@ impl<T: Storage + Clone> AddressLoader for Loader<T> {
         lookups
             .iter()
             .map(|lookup| {
-                self.load_lookup_table_addresses(lookup).map_err(|e| {
+                self.load_lookup_table_addresses(lookup).map_err(|_| {
                     solana_sdk::message::AddressLoaderError::LookupTableAccountNotFound
                 })
             })
