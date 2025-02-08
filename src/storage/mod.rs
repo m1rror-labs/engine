@@ -171,7 +171,16 @@ impl Storage for PgStorage {
         address: &Pubkey,
         lamports: u64,
     ) -> Result<(), String> {
-        todo!()
+        let mut conn = self.get_connection()?;
+        diesel::update(
+            crate::schema::accounts::table
+                .filter(crate::schema::accounts::address.eq(address.to_string()))
+                .filter(crate::schema::accounts::blockchain.eq(id)),
+        )
+        .set(crate::schema::accounts::lamports.eq(lamports as i64))
+        .execute(&mut conn)
+        .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     fn set_account(
