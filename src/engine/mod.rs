@@ -1,6 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
-
+use blocks::Block;
 use chrono::{DateTime, Utc};
+use sha2::{Digest, Sha256};
 use solana_compute_budget::compute_budget::ComputeBudget;
 use solana_log_collector::LogCollector;
 use solana_program_runtime::{
@@ -29,6 +29,7 @@ use solana_sdk::{
 };
 use solana_svm::message_processor::MessageProcessor;
 use solana_timings::ExecuteTimings;
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc}; // Add this import at the top of your file
 use transactions::TransactionMetadata;
 use uuid::Uuid;
 
@@ -150,7 +151,7 @@ impl<T: Storage + AddressLoader> SVM<T> for SvmEngine<T> {
 
         let context = context.unwrap();
         let (signature, return_data, inner_instructions, post_accounts) =
-            execute_tx_helper(tx, context);
+            execute_tx_helper(tx.clone(), context);
         let Ok(logs) = Rc::try_unwrap(log_collector).map(|lc| lc.into_inner().messages) else {
             unreachable!("Log collector should not be used after send_transaction returns")
         };
@@ -173,7 +174,9 @@ impl<T: Storage + AddressLoader> SVM<T> for SvmEngine<T> {
                 .collect(),
         )?;
 
-        Ok("".to_string())
+        self.progress_block(id)?;
+
+        Ok(tx.signature().to_string())
     }
 }
 
@@ -382,6 +385,26 @@ impl<T: Storage + AddressLoader> SvmEngine<T> {
             }
             Err(e) => (Err(e), accumulated_consume_units, None, fee, payer_key),
         }
+    }
+
+    pub fn progress_block(&self, id: Uuid) -> Result<(), String> {
+        let latest_block = self.storage.get_latest_block(id)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(latest_block.blockhash.as_ref());
+        let hash_array = hasher.finalize();
+        let current_blockhash = Hash::new_from_array(hash_array.into());
+        let next_block = Block {
+            blockhash: current_blockhash,
+            block_time: latest_block.block_time + 60,
+            previous_blockhash: latest_block.blockhash,
+            block_height: latest_block.block_height + 1,
+            parent_slot: latest_block.block_height,
+            transactions: vec![],
+        };
+
+        self.storage.set_block(id, next_block)?;
+        Ok(())
     }
 }
 

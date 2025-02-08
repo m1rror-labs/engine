@@ -200,7 +200,6 @@ impl Storage for PgStorage {
     }
 
     fn set_accounts(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String> {
-        //Update the database account values
         let mut conn = self.get_connection()?;
         let db_accounts: Vec<DbAccount> = accounts
             .iter()

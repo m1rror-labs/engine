@@ -2027,6 +2027,7 @@ dependencies = [
  "r2d2",
  "serde",
  "serde_json",
+ "sha2 0.9.9",
  "solana-compute-budget",
  "solana-fee",
  "solana-log-collector",
