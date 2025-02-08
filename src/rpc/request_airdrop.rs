@@ -1,11 +1,10 @@
 use serde_json::Value;
-use solana_sdk::message::AddressLoader;
 
 use crate::{engine::SvmEngine, storage::Storage};
 
 use super::rpc::{parse_pubkey, RpcRequest};
 
-pub fn request_airdrop<T: Storage + AddressLoader>(
+pub fn request_airdrop<T: Storage + Clone>(
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {

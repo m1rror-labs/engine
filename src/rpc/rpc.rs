@@ -1,13 +1,9 @@
-use std::{
-    str::FromStr,
-    sync::{Arc, RwLock},
-};
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use solana_sdk::{
-    hash::Hash, message::AddressLoader, pubkey::Pubkey, signature::Signature,
-    transaction::VersionedTransaction,
+    hash::Hash, pubkey::Pubkey, signature::Signature, transaction::VersionedTransaction,
 };
 use uuid::Uuid;
 
@@ -96,7 +92,7 @@ pub struct RpcResponse {
     pub error: Option<serde_json::Value>,
 }
 
-pub fn handle_request<T: Storage + AddressLoader>(
+pub fn handle_request<T: Storage + Clone>(
     id: Uuid,
     req: RpcRequest,
     svm: &SvmEngine<T>,

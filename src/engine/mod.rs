@@ -11,12 +11,16 @@ use solana_program_runtime::{
 use solana_sdk::{
     account::{Account, AccountSharedData, ReadableAccount, WritableAccount},
     account_utils::StateMut,
+    address_lookup_table::{self, error::AddressLookupError, state::AddressLookupTable},
     feature_set::{remove_rounding_in_fee_calculation, FeatureSet},
     fee::FeeStructure,
     hash::Hash,
     inner_instruction::{InnerInstruction, InnerInstructionsList},
     instruction::{CompiledInstruction, TRANSACTION_LEVEL_STACK_HEIGHT},
-    message::{AddressLoader, SanitizedMessage},
+    message::{
+        v0::{LoadedAddresses, MessageAddressTableLookup},
+        AddressLoader, SanitizedMessage,
+    },
     native_loader, nonce,
     pubkey::Pubkey,
     rent::Rent,
@@ -38,7 +42,7 @@ use crate::storage::Storage;
 pub mod blocks;
 pub mod transactions;
 
-pub trait SVM<T: Storage + AddressLoader> {
+pub trait SVM<T: Storage + Clone> {
     fn new(storage: T) -> Self;
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
     fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
@@ -48,7 +52,7 @@ pub trait SVM<T: Storage + AddressLoader> {
     fn send_transaction(&self, id: Uuid, tx: VersionedTransaction) -> Result<String, String>;
 }
 
-pub struct SvmEngine<T: Storage + AddressLoader> {
+pub struct SvmEngine<T: Storage + Clone> {
     rent: Rent,
     fee_structure: FeeStructure,
     feature_set: FeatureSet,
@@ -56,7 +60,7 @@ pub struct SvmEngine<T: Storage + AddressLoader> {
     storage: T,
 }
 
-impl<T: Storage + AddressLoader> SVM<T> for SvmEngine<T> {
+impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
     fn new(storage: T) -> Self {
         SvmEngine {
             rent: Rent::default(),
@@ -101,11 +105,13 @@ impl<T: Storage + AddressLoader> SVM<T> for SvmEngine<T> {
     }
 
     fn send_transaction(&self, id: Uuid, raw_tx: VersionedTransaction) -> Result<String, String> {
+        let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
+
         let tx = match SanitizedTransaction::try_create(
             raw_tx,
             MessageHash::Compute,
             Some(false),
-            self.storage.clone(),
+            address_loader,
             &ReservedAccountKeys::empty_key_set(),
         ) {
             Ok(tx) => tx,
@@ -180,7 +186,7 @@ impl<T: Storage + AddressLoader> SVM<T> for SvmEngine<T> {
     }
 }
 
-impl<T: Storage + AddressLoader> SvmEngine<T> {
+impl<T: Storage + Clone> SvmEngine<T> {
     fn create_transaction_context(
         &self,
         compute_budget: ComputeBudget,
@@ -648,4 +654,71 @@ pub fn inner_instructions_list_from_instruction_trace(
         }
     }
     outer_instructions
+}
+
+#[derive(Clone)]
+struct Loader<T: Storage + Clone> {
+    storage: T,
+    id: Uuid,
+    sysvar_cache: SysvarCache,
+}
+
+impl<T: Storage + Clone> AddressLoader for Loader<T> {
+    fn load_addresses(
+        self,
+        lookups: &[solana_sdk::message::v0::MessageAddressTableLookup],
+    ) -> Result<solana_sdk::message::v0::LoadedAddresses, solana_sdk::message::AddressLoaderError>
+    {
+        lookups
+            .iter()
+            .map(|lookup| {
+                self.load_lookup_table_addresses(lookup).map_err(|e| {
+                    solana_sdk::message::AddressLoaderError::LookupTableAccountNotFound
+                })
+            })
+            .collect()
+    }
+}
+
+impl<T: Storage + Clone> Loader<T> {
+    fn new(storage: T, id: Uuid, sysvar_cache: SysvarCache) -> Self {
+        Loader {
+            storage,
+            id,
+            sysvar_cache,
+        }
+    }
+
+    fn load_lookup_table_addresses(
+        &self,
+        address_table_lookup: &MessageAddressTableLookup,
+    ) -> std::result::Result<LoadedAddresses, AddressLookupError> {
+        let table_account = self
+            .storage
+            .get_account(self.id, &address_table_lookup.account_key)
+            .map_err(|_| AddressLookupError::LookupTableAccountNotFound)?
+            .ok_or(AddressLookupError::LookupTableAccountNotFound)?;
+
+        if table_account.owner() == &address_lookup_table::program::id() {
+            let slot_hashes = self.sysvar_cache.get_slot_hashes().unwrap();
+            let current_slot = self.sysvar_cache.get_clock().unwrap().slot;
+            let lookup_table = AddressLookupTable::deserialize(table_account.data())
+                .map_err(|_ix_err| AddressLookupError::InvalidAccountData)?;
+
+            Ok(LoadedAddresses {
+                writable: lookup_table.lookup(
+                    current_slot,
+                    &address_table_lookup.writable_indexes,
+                    &slot_hashes,
+                )?,
+                readonly: lookup_table.lookup(
+                    current_slot,
+                    &address_table_lookup.readonly_indexes,
+                    &slot_hashes,
+                )?,
+            })
+        } else {
+            Err(AddressLookupError::InvalidAccountOwner)
+        }
+    }
 }

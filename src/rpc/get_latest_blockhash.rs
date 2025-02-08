@@ -1,5 +1,4 @@
 use serde_json::Value;
-use solana_sdk::message::AddressLoader;
 use uuid::Uuid;
 
 use crate::{
@@ -7,7 +6,7 @@ use crate::{
     storage::Storage,
 };
 
-pub fn get_latest_blockhash<T: Storage + AddressLoader>(
+pub fn get_latest_blockhash<T: Storage + Clone>(
     id: Uuid,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {

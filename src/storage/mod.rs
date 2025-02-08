@@ -1,19 +1,12 @@
 use accounts::DbAccount;
+use blocks::DbBlock;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::upsert::excluded;
-use solana_sdk::message::AddressLoader;
+
 use solana_sdk::{
-    account::Account,
-    hash::Hash,
-    message::{
-        v0::{LoadedAddresses, MessageAddressTableLookup},
-        AddressLoaderError,
-    },
-    pubkey::Pubkey,
-    signature::Signature,
-    transaction::Transaction,
+    account::Account, hash::Hash, pubkey::Pubkey, signature::Signature, transaction::Transaction,
 };
 use uuid::Uuid;
 
@@ -52,11 +45,6 @@ pub trait Storage {
         id: Uuid,
         signature: &Signature,
     ) -> Result<Option<Transaction>, String>;
-
-    fn load_addresses(
-        self,
-        lookups: &[MessageAddressTableLookup],
-    ) -> Result<LoadedAddresses, AddressLoaderError>;
 }
 
 type PgPool = r2d2::Pool<ConnectionManager<PgConnection>>;
@@ -179,19 +167,42 @@ impl Storage for PgStorage {
     }
 
     fn set_block(&self, id: Uuid, block: Block) -> Result<(), String> {
-        todo!()
+        let mut conn = self.get_connection()?;
+        diesel::insert_into(crate::schema::blocks::table)
+            .values(DbBlock::from_block(&block, id))
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String> {
-        todo!()
+        let mut conn = self.get_connection()?;
+        let block: DbBlock = crate::schema::blocks::table
+            .filter(crate::schema::blocks::blockhash.eq(blockhash.to_bytes().to_vec()))
+            .filter(crate::schema::blocks::blockchain.eq(id))
+            .first(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(block.into_block().0)
     }
 
     fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Block, String> {
-        todo!()
+        let mut conn = self.get_connection()?;
+        let block: DbBlock = crate::schema::blocks::table
+            .filter(crate::schema::blocks::block_height.eq(height as i64))
+            .filter(crate::schema::blocks::blockchain.eq(id))
+            .first(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(block.into_block().0)
     }
 
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String> {
-        todo!()
+        let mut conn = self.get_connection()?;
+        let block: DbBlock = crate::schema::blocks::table
+            .filter(crate::schema::blocks::blockchain.eq(id))
+            .order(crate::schema::blocks::block_height.desc())
+            .first(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(block.into_block().0)
     }
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String> {
@@ -203,22 +214,6 @@ impl Storage for PgStorage {
         id: Uuid,
         signature: &Signature,
     ) -> Result<Option<Transaction>, String> {
-        todo!()
-    }
-
-    fn load_addresses(
-        self,
-        lookups: &[MessageAddressTableLookup],
-    ) -> Result<LoadedAddresses, AddressLoaderError> {
-        todo!()
-    }
-}
-
-impl AddressLoader for PgStorage {
-    fn load_addresses(
-        self,
-        lookups: &[MessageAddressTableLookup],
-    ) -> Result<LoadedAddresses, AddressLoaderError> {
         todo!()
     }
 }

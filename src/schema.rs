@@ -19,12 +19,12 @@ table! {
     blocks (id) {
         id -> Uuid,
         created_at -> Timestamp,
+        blockchain -> Uuid,
         blockhash -> Bytea,
         previous_blockhash -> Bytea,
         parent_slot -> BigInt,
         block_height -> BigInt,
         slot -> BigInt,
-        blockchain -> Uuid,
     }
 }
 

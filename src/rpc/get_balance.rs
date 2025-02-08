@@ -1,5 +1,4 @@
 use serde_json::Value;
-use solana_sdk::message::AddressLoader;
 use uuid::Uuid;
 
 use crate::{
@@ -9,7 +8,7 @@ use crate::{
 
 use super::rpc::{parse_pubkey, RpcRequest};
 
-pub fn get_balance<T: Storage + AddressLoader>(
+pub fn get_balance<T: Storage + Clone>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,

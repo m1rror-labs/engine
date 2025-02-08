@@ -1,5 +1,4 @@
 use serde_json::Value;
-use solana_sdk::message::AddressLoader;
 
 use crate::{
     engine::{SvmEngine, SVM},
@@ -8,7 +7,7 @@ use crate::{
 
 use super::rpc::RpcRequest;
 
-pub fn get_minimum_balance_for_rent_exemption<T: Storage + AddressLoader>(
+pub fn get_minimum_balance_for_rent_exemption<T: Storage + Clone>(
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {

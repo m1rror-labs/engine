@@ -1,5 +1,4 @@
 use serde_json::Value;
-use solana_sdk::message::AddressLoader;
 use uuid::Uuid;
 
 use crate::{
@@ -9,7 +8,7 @@ use crate::{
 
 use super::rpc::{parse_tx, RpcRequest};
 
-pub fn send_transaction<T: Storage + AddressLoader>(
+pub fn send_transaction<T: Storage + Clone>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
