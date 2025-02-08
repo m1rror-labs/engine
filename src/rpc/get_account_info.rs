@@ -1,8 +1,16 @@
 use serde_json::Value;
+use solana_sdk::message::AddressLoader;
+use uuid::Uuid;
+
+use crate::{engine::SVM, storage::Storage};
 
 use super::rpc::{parse_pubkey, Dependencies, RpcRequest};
 
-pub fn get_account_info(req: &RpcRequest, deps: &Dependencies) -> Result<Value, Value> {
+pub fn get_account_info<T: Storage + AddressLoader>(
+    id: Uuid,
+    req: &RpcRequest,
+    deps: &Dependencies<T>,
+) -> Result<Value, Value> {
     let pubkey_str = match req
         .params
         .as_ref()
@@ -19,24 +27,29 @@ pub fn get_account_info(req: &RpcRequest, deps: &Dependencies) -> Result<Value, 
     };
     let pubkey = parse_pubkey(pubkey_str)?;
 
-    let lite_svm = deps.lite_svm.read().unwrap();
+    let svm = deps.svm.read().unwrap();
 
-    if let Some(account) = lite_svm.get_account(&pubkey) {
-        Ok(serde_json::json!({
-            "context": { "apiVersion": "2.0.15", "slot": 341197053 },
-            "value": {
-                "data": account.data,
-                "executable": account.executable,
-                "lamports": account.lamports,
-                "owner": account.owner.to_string(),
-                "rentEpoch": account.rent_epoch,
-                "space": account.data.len(),
-            },
-        }))
-    } else {
-        Ok(serde_json::json!({
-            "context": { "apiVersion": "2.0.15", "slot": 341197053 },
-            "value": null,
-        }))
+    match svm.get_account(id, &pubkey) {
+        Ok(account) => match account {
+            Some(account) => Ok(serde_json::json!({
+                "context": { "slot": 341197053 },
+                "value": {
+                    "data": account.data,
+                    "executable": account.executable,
+                    "lamports": account.lamports,
+                    "owner": account.owner.to_string(),
+                    "rentEpoch": account.rent_epoch,
+                    "space": account.data.len(),
+                },
+            })),
+            None => Ok(serde_json::json!({
+                "context": { "slot": 341197053 },
+                "value": null,
+            })),
+        },
+        Err(e) => Err(serde_json::json!({
+            "code": -32002,
+            "message": e,
+        })),
     }
 }

@@ -1,8 +1,16 @@
 use serde_json::Value;
+use solana_sdk::message::AddressLoader;
+use uuid::Uuid;
+
+use crate::{engine::SVM, storage::Storage};
 
 use super::rpc::{parse_tx, Dependencies, RpcRequest};
 
-pub fn send_transaction(req: &RpcRequest, deps: &Dependencies) -> Result<Value, Value> {
+pub fn send_transaction<T: Storage + AddressLoader>(
+    id: Uuid,
+    req: &RpcRequest,
+    deps: &Dependencies<T>,
+) -> Result<Value, Value> {
     let tx = match req
         .params
         .as_ref()
@@ -26,9 +34,9 @@ pub fn send_transaction(req: &RpcRequest, deps: &Dependencies) -> Result<Value, 
         }
     };
 
-    let mut lite_svm = deps.lite_svm.write().unwrap();
-    match lite_svm.send_transaction(tx) {
-        Ok(res) => Ok(serde_json::json!(res.signature.to_string())),
+    let svm = deps.svm.write().unwrap();
+    match svm.send_transaction(id, tx) {
+        Ok(res) => Ok(serde_json::json!(res)),
         Err(_) => Err(serde_json::json!({
             "code": -32602,
             "message": "Failed to send tx",

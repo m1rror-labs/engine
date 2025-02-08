@@ -1,13 +1,25 @@
+use std::env;
+
 use actix_cors::Cors;
 use actix_web::{middleware, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
 use env_logger::Env;
-use litesvm::LiteSVM;
-use mockchain_engine::rpc::rpc::{handle_request, Dependencies, RpcRequest};
+use mockchain_engine::{
+    engine::{SvmEngine, SVM},
+    rpc::rpc::{handle_request, Dependencies, RpcRequest},
+    storage::{self, PgStorage},
+};
 
-#[post("/")]
-async fn rpc_reqest(req: web::Json<RpcRequest>, deps: web::Data<Dependencies>) -> impl Responder {
-    let res = handle_request(req.into_inner(), &deps);
+use uuid::Uuid;
+
+#[post("/{id}")]
+async fn rpc_reqest(
+    req: web::Json<RpcRequest>,
+    deps: web::Data<Dependencies<PgStorage>>,
+    path: web::Path<Uuid>,
+) -> impl Responder {
+    let id = path.into_inner();
+    let res = handle_request(id, req.into_inner(), &deps);
     HttpResponse::Ok().json(res)
 }
 
@@ -17,7 +29,9 @@ async fn main() -> std::io::Result<()> {
 
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
-    let svm = LiteSVM::new();
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let storage = storage::PgStorage::new(&database_url);
+    let svm = SvmEngine::new(storage);
 
     let deps = Dependencies::new(svm);
 

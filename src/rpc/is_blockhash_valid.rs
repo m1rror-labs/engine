@@ -1,8 +1,16 @@
 use serde_json::Value;
+use solana_sdk::message::AddressLoader;
+use uuid::Uuid;
+
+use crate::{engine::SVM, storage::Storage};
 
 use super::rpc::{parse_hash, Dependencies, RpcRequest};
 
-pub fn is_blockhash_valid(req: &RpcRequest, deps: &Dependencies) -> Result<Value, Value> {
+pub fn is_blockhash_valid<T: Storage + AddressLoader>(
+    id: Uuid,
+    req: &RpcRequest,
+    deps: &Dependencies<T>,
+) -> Result<Value, Value> {
     let hash_str = match req
         .params
         .as_ref()
@@ -19,9 +27,9 @@ pub fn is_blockhash_valid(req: &RpcRequest, deps: &Dependencies) -> Result<Value
     };
     let hash = parse_hash(hash_str)?;
 
-    let lite_svm = deps.lite_svm.read().unwrap();
-    let latest_hash = lite_svm.latest_blockhash();
-    if hash == latest_hash {
+    let svm = deps.svm.read().unwrap();
+    let latest_hash = svm.latest_blockhash(id)?;
+    if hash.to_string() == latest_hash {
         Ok(serde_json::json!({
             "context": { "slot": 341197053 },
             "value": true,

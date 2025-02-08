@@ -1,8 +1,14 @@
 use serde_json::Value;
+use solana_sdk::message::AddressLoader;
+
+use crate::storage::Storage;
 
 use super::rpc::{parse_pubkey, Dependencies, RpcRequest};
 
-pub fn request_airdrop(req: &RpcRequest, deps: &Dependencies) -> Result<Value, Value> {
+pub fn request_airdrop<T: Storage + AddressLoader>(
+    req: &RpcRequest,
+    deps: &Dependencies<T>,
+) -> Result<Value, Value> {
     let pubkey_str = match req
         .params
         .as_ref()
@@ -34,12 +40,17 @@ pub fn request_airdrop(req: &RpcRequest, deps: &Dependencies) -> Result<Value, V
         }
     };
 
-    let mut lite_svm = deps.lite_svm.write().unwrap();
-    match lite_svm.airdrop(&pubkey, lamports) {
-        Ok(res) => Ok(serde_json::json!(res.signature.to_string())),
-        Err(_) => Err(serde_json::json!({
-            "code": -32602,
-            "message": "Failed to airdrop",
-        })),
-    }
+    Err(serde_json::json!({
+        "code": -32602,
+        "message": "Failed to airdrop",
+    }))
+
+    // let mut svm = deps.svm.write().unwrap();
+    // match svm.airdrop(&pubkey, lamports) {
+    //     Ok(res) => Ok(serde_json::json!(res.signature.to_string())),
+    //     Err(_) => Err(serde_json::json!({
+    //         "code": -32602,
+    //         "message": "Failed to airdrop",
+    //     })),
+    // }
 }

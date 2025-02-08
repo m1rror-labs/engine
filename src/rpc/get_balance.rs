@@ -1,8 +1,16 @@
 use serde_json::Value;
+use solana_sdk::message::AddressLoader;
+use uuid::Uuid;
+
+use crate::{engine::SVM, storage::Storage};
 
 use super::rpc::{parse_pubkey, Dependencies, RpcRequest};
 
-pub fn get_balance(req: &RpcRequest, deps: &Dependencies) -> Result<Value, Value> {
+pub fn get_balance<T: Storage + AddressLoader>(
+    id: Uuid,
+    req: &RpcRequest,
+    deps: &Dependencies<T>,
+) -> Result<Value, Value> {
     let pubkey_str = match req
         .params
         .as_ref()
@@ -19,17 +27,21 @@ pub fn get_balance(req: &RpcRequest, deps: &Dependencies) -> Result<Value, Value
     };
     let pubkey = parse_pubkey(pubkey_str)?;
 
-    let lite_svm = deps.lite_svm.read().unwrap();
-
-    if let Some(balance) = lite_svm.get_balance(&pubkey) {
-        Ok(serde_json::json!({
-            "context": { "apiVersion": "2.0.15", "slot": 341197053 },
-            "value": balance,
-        }))
-    } else {
-        Ok(serde_json::json!({
-            "context": { "apiVersion": "2.0.15", "slot": 341197053 },
-            "value": 0,
-        }))
+    let svm = deps.svm.read().unwrap();
+    match svm.get_balance(id, &pubkey) {
+        Ok(balance) => match balance {
+            Some(balance) => Ok(serde_json::json!({
+                "context": { "slot": 341197053 },
+                "value": balance,
+            })),
+            None => Ok(serde_json::json!({
+                "context": { "slot": 341197053 },
+                "value": 0,
+            })),
+        },
+        Err(e) => Err(serde_json::json!({
+            "code": -32002,
+            "message": e,
+        })),
     }
 }

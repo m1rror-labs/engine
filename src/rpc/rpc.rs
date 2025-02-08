@@ -3,11 +3,17 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use litesvm::LiteSVM;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use solana_sdk::{
-    hash::Hash, pubkey::Pubkey, signature::Signature, transaction::VersionedTransaction,
+    hash::Hash, message::AddressLoader, pubkey::Pubkey, signature::Signature,
+    transaction::VersionedTransaction,
+};
+use uuid::Uuid;
+
+use crate::{
+    engine::SvmEngine,
+    storage::{PgStorage, Storage},
 };
 
 use super::{
@@ -17,6 +23,19 @@ use super::{
     get_version::get_version, is_blockhash_valid::is_blockhash_valid,
     request_airdrop::request_airdrop, send_transaction::send_transaction,
 };
+
+#[derive(Clone)]
+pub struct Dependencies<T: Storage + AddressLoader> {
+    pub svm: Arc<RwLock<SvmEngine<T>>>,
+}
+
+impl<T: Storage + AddressLoader> Dependencies<T> {
+    pub fn new(svm: SvmEngine<T>) -> Self {
+        Self {
+            svm: Arc::new(RwLock::new(svm)),
+        }
+    }
+}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -93,23 +112,14 @@ pub struct RpcResponse {
     pub error: Option<serde_json::Value>,
 }
 
-#[derive(Clone)]
-pub struct Dependencies {
-    pub lite_svm: Arc<RwLock<LiteSVM>>,
-}
-
-impl Dependencies {
-    pub fn new(lite_svm: LiteSVM) -> Self {
-        Self {
-            lite_svm: Arc::new(RwLock::new(lite_svm)),
-        }
-    }
-}
-
-pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
+pub fn handle_request<T: Storage + AddressLoader>(
+    id: Uuid,
+    req: RpcRequest,
+    deps: &Dependencies<T>,
+) -> RpcResponse {
     let result = match req.method {
-        RpcMethod::GetAccountInfo => get_account_info(&req, deps),
-        RpcMethod::GetBalance => get_balance(&req, deps),
+        RpcMethod::GetAccountInfo => get_account_info(id, &req, deps),
+        RpcMethod::GetBalance => get_balance(id, &req, deps),
         RpcMethod::GetBlock => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
@@ -187,7 +197,7 @@ pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetLatestBlockhash => get_latest_blockhash(deps),
+        RpcMethod::GetLatestBlockhash => get_latest_blockhash(id, deps),
         RpcMethod::GetLeaderSchedule => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
@@ -280,13 +290,13 @@ pub fn handle_request(req: RpcRequest, deps: &Dependencies) -> RpcResponse {
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::IsBlockhashValid => is_blockhash_valid(&req, deps),
+        RpcMethod::IsBlockhashValid => is_blockhash_valid(id, &req, deps),
         RpcMethod::MinimumLedgerSlot => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
         RpcMethod::RequestAirdrop => request_airdrop(&req, deps),
-        RpcMethod::SendTransaction => send_transaction(&req, deps),
+        RpcMethod::SendTransaction => send_transaction(id, &req, deps),
         RpcMethod::SimulateTransaction => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
