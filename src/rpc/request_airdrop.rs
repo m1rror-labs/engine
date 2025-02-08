@@ -1,10 +1,15 @@
 use serde_json::Value;
+use uuid::Uuid;
 
-use crate::{engine::SvmEngine, storage::Storage};
+use crate::{
+    engine::{SvmEngine, SVM},
+    storage::Storage,
+};
 
 use super::rpc::{parse_pubkey, RpcRequest};
 
 pub fn request_airdrop<T: Storage + Clone>(
+    id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
@@ -38,6 +43,13 @@ pub fn request_airdrop<T: Storage + Clone>(
             }));
         }
     };
+
+    if let Err(e) = svm.airdrop(id, &pubkey, lamports) {
+        return Err(serde_json::json!({
+            "code": -32602,
+            "message": e.to_string(),
+        }));
+    }
 
     Err(serde_json::json!({
         "code": -32602,

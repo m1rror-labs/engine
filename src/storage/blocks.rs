@@ -1,8 +1,8 @@
 use diesel::prelude::*;
-use solana_sdk::hash::Hash;
+use solana_sdk::{hash::Hash, signature::Keypair};
 use uuid::Uuid;
 
-use crate::engine::blocks::Block;
+use crate::engine::blocks::{Block, Blockchain};
 
 #[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
 #[diesel(table_name = crate::schema::blockchain)]
@@ -11,6 +11,16 @@ pub struct DbBlockchain {
     pub id: Uuid,
     pub created_at: chrono::NaiveDateTime,
     pub airdrop_keypair: Vec<u8>,
+}
+
+impl DbBlockchain {
+    pub fn to_blockchain(self) -> Blockchain {
+        Blockchain {
+            id: self.id,
+            created_at: self.created_at,
+            airdrop_keypair: Keypair::from_bytes(self.airdrop_keypair.as_slice()).unwrap(),
+        }
+    }
 }
 
 #[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]

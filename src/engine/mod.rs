@@ -19,21 +19,22 @@ use solana_sdk::{
     instruction::{CompiledInstruction, TRANSACTION_LEVEL_STACK_HEIGHT},
     message::{
         v0::{LoadedAddresses, MessageAddressTableLookup},
-        AddressLoader, SanitizedMessage,
+        AddressLoader, Message, SanitizedMessage, VersionedMessage,
     },
     native_loader, nonce,
     pubkey::Pubkey,
     rent::Rent,
     reserved_account_keys::ReservedAccountKeys,
     signature::Signature,
-    system_program,
+    signer::Signer,
+    system_instruction, system_program,
     sysvar::{self, instructions::construct_instructions_data},
     transaction::{MessageHash, SanitizedTransaction, TransactionError, VersionedTransaction},
     transaction_context::{ExecutionRecord, IndexOfAccount, TransactionContext},
 };
 use solana_svm::message_processor::MessageProcessor;
 use solana_timings::ExecuteTimings;
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc}; // Add this import at the top of your file
+use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr, sync::Arc}; // Add this import at the top of your file
 use transactions::TransactionMetadata;
 use uuid::Uuid;
 
@@ -51,6 +52,7 @@ pub trait SVM<T: Storage + Clone> {
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
     fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
     fn send_transaction(&self, id: Uuid, tx: VersionedTransaction) -> Result<String, String>;
+    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<(), String>;
 }
 
 pub struct SvmEngine<T: Storage + Clone> {
@@ -208,6 +210,30 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         self.progress_block(id)?;
 
         Ok(tx.signature().to_string())
+    }
+
+    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<(), String> {
+        let blockchain = self.storage.get_blockchain(id)?;
+        let payer = blockchain.airdrop_keypair;
+        let latest_blockhash = self.latest_blockhash(id)?;
+        let tx = VersionedTransaction::try_new(
+            VersionedMessage::Legacy(Message::new_with_blockhash(
+                &[system_instruction::transfer(
+                    &payer.pubkey(),
+                    pubkey,
+                    lamports,
+                )],
+                Some(&payer.pubkey()),
+                &Hash::from_str(latest_blockhash.as_str()).unwrap(),
+            )),
+            &[payer],
+        )
+        .unwrap();
+
+        match self.send_transaction(id, tx) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
+        }
     }
 }
 

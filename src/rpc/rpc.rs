@@ -275,7 +275,7 @@ pub fn handle_request<T: Storage + Clone>(
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::RequestAirdrop => request_airdrop(&req, svm),
+        RpcMethod::RequestAirdrop => request_airdrop(id, &req, svm),
         RpcMethod::SendTransaction => send_transaction(id, &req, svm),
         RpcMethod::SimulateTransaction => Err(serde_json::json!({
             "code": -32601,

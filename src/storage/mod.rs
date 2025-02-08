@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use accounts::DbAccount;
-use blocks::DbBlock;
+use blocks::{DbBlock, DbBlockchain};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
@@ -20,6 +20,7 @@ pub mod accounts;
 pub mod blocks;
 pub mod transactions;
 
+use crate::engine::blocks::Blockchain;
 use crate::engine::{blocks::Block, transactions::TransactionMetadata};
 
 pub trait Storage {
@@ -44,6 +45,8 @@ pub trait Storage {
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String>;
     fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Block, String>;
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
+
+    fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String>;
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String>;
     fn get_transaction(
@@ -77,6 +80,15 @@ impl PgStorage {
 }
 
 impl Storage for PgStorage {
+    fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String> {
+        let mut conn = self.get_connection()?;
+        let blockchain = crate::schema::blockchain::table
+            .filter(crate::schema::blockchain::id.eq(id))
+            .first::<DbBlockchain>(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(blockchain.to_blockchain())
+    }
+
     fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String> {
         let mut conn = self.get_connection()?;
         let account = crate::schema::accounts::table

@@ -1,4 +1,5 @@
-use solana_sdk::{hash::Hash, transaction::VersionedTransaction};
+use solana_sdk::{hash::Hash, signature::Keypair, transaction::VersionedTransaction};
+use uuid::Uuid;
 
 pub struct Block {
     pub blockhash: Hash,          // Hash of this block
@@ -7,4 +8,10 @@ pub struct Block {
     pub block_time: u64,          // Unix timestamp
     pub parent_slot: u64,         // Slot of the block preceding this block
     pub transactions: Vec<VersionedTransaction>,
+}
+
+pub struct Blockchain {
+    pub id: Uuid,
+    pub created_at: chrono::NaiveDateTime,
+    pub airdrop_keypair: Keypair,
 }
