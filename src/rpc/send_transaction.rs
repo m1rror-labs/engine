@@ -2,14 +2,17 @@ use serde_json::Value;
 use solana_sdk::message::AddressLoader;
 use uuid::Uuid;
 
-use crate::{engine::SVM, storage::Storage};
+use crate::{
+    engine::{SvmEngine, SVM},
+    storage::Storage,
+};
 
-use super::rpc::{parse_tx, Dependencies, RpcRequest};
+use super::rpc::{parse_tx, RpcRequest};
 
 pub fn send_transaction<T: Storage + AddressLoader>(
     id: Uuid,
     req: &RpcRequest,
-    deps: &Dependencies<T>,
+    svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
     let tx = match req
         .params
@@ -34,7 +37,6 @@ pub fn send_transaction<T: Storage + AddressLoader>(
         }
     };
 
-    let svm = deps.svm.write().unwrap();
     match svm.send_transaction(id, tx) {
         Ok(res) => Ok(serde_json::json!(res)),
         Err(_) => Err(serde_json::json!({

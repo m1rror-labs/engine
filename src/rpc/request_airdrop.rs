@@ -1,13 +1,13 @@
 use serde_json::Value;
 use solana_sdk::message::AddressLoader;
 
-use crate::storage::Storage;
+use crate::{engine::SvmEngine, storage::Storage};
 
-use super::rpc::{parse_pubkey, Dependencies, RpcRequest};
+use super::rpc::{parse_pubkey, RpcRequest};
 
 pub fn request_airdrop<T: Storage + AddressLoader>(
     req: &RpcRequest,
-    deps: &Dependencies<T>,
+    svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
     let pubkey_str = match req
         .params

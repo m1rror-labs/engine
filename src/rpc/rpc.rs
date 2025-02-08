@@ -11,10 +11,7 @@ use solana_sdk::{
 };
 use uuid::Uuid;
 
-use crate::{
-    engine::SvmEngine,
-    storage::{PgStorage, Storage},
-};
+use crate::{engine::SvmEngine, storage::Storage};
 
 use super::{
     get_account_info::get_account_info, get_balance::get_balance, get_health::get_health,
@@ -23,19 +20,6 @@ use super::{
     get_version::get_version, is_blockhash_valid::is_blockhash_valid,
     request_airdrop::request_airdrop, send_transaction::send_transaction,
 };
-
-#[derive(Clone)]
-pub struct Dependencies<T: Storage + AddressLoader> {
-    pub svm: Arc<RwLock<SvmEngine<T>>>,
-}
-
-impl<T: Storage + AddressLoader> Dependencies<T> {
-    pub fn new(svm: SvmEngine<T>) -> Self {
-        Self {
-            svm: Arc::new(RwLock::new(svm)),
-        }
-    }
-}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -115,11 +99,11 @@ pub struct RpcResponse {
 pub fn handle_request<T: Storage + AddressLoader>(
     id: Uuid,
     req: RpcRequest,
-    deps: &Dependencies<T>,
+    svm: &SvmEngine<T>,
 ) -> RpcResponse {
     let result = match req.method {
-        RpcMethod::GetAccountInfo => get_account_info(id, &req, deps),
-        RpcMethod::GetBalance => get_balance(id, &req, deps),
+        RpcMethod::GetAccountInfo => get_account_info(id, &req, svm),
+        RpcMethod::GetBalance => get_balance(id, &req, svm),
         RpcMethod::GetBlock => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
@@ -197,7 +181,7 @@ pub fn handle_request<T: Storage + AddressLoader>(
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetLatestBlockhash => get_latest_blockhash(id, deps),
+        RpcMethod::GetLatestBlockhash => get_latest_blockhash(id, svm),
         RpcMethod::GetLeaderSchedule => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
@@ -211,7 +195,7 @@ pub fn handle_request<T: Storage + AddressLoader>(
             "message": "Method not found",
         })),
         RpcMethod::GetMinimumBalanceForRentExemption => {
-            get_minimum_balance_for_rent_exemption(&req, deps)
+            get_minimum_balance_for_rent_exemption(&req, svm)
         }
         RpcMethod::GetMultipleAccounts => Err(serde_json::json!({
             "code": -32601,
@@ -290,13 +274,13 @@ pub fn handle_request<T: Storage + AddressLoader>(
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::IsBlockhashValid => is_blockhash_valid(id, &req, deps),
+        RpcMethod::IsBlockhashValid => is_blockhash_valid(id, &req, svm),
         RpcMethod::MinimumLedgerSlot => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::RequestAirdrop => request_airdrop(&req, deps),
-        RpcMethod::SendTransaction => send_transaction(id, &req, deps),
+        RpcMethod::RequestAirdrop => request_airdrop(&req, svm),
+        RpcMethod::SendTransaction => send_transaction(id, &req, svm),
         RpcMethod::SimulateTransaction => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",

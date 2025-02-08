@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, sync::Arc};
 
 use actix_cors::Cors;
 use actix_web::{middleware, post, web, App, HttpResponse, HttpServer, Responder};
@@ -6,7 +6,7 @@ use dotenv::dotenv;
 use env_logger::Env;
 use mockchain_engine::{
     engine::{SvmEngine, SVM},
-    rpc::rpc::{handle_request, Dependencies, RpcRequest},
+    rpc::rpc::{handle_request, RpcRequest},
     storage::{self, PgStorage},
 };
 
@@ -15,11 +15,11 @@ use uuid::Uuid;
 #[post("/{id}")]
 async fn rpc_reqest(
     req: web::Json<RpcRequest>,
-    deps: web::Data<Dependencies<PgStorage>>,
+    svm: web::Data<SvmEngine<PgStorage>>,
     path: web::Path<Uuid>,
 ) -> impl Responder {
     let id = path.into_inner();
-    let res = handle_request(id, req.into_inner(), &deps);
+    let res = handle_request(id, req.into_inner(), &svm);
     HttpResponse::Ok().json(res)
 }
 
@@ -31,13 +31,11 @@ async fn main() -> std::io::Result<()> {
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let storage = storage::PgStorage::new(&database_url);
-    let svm = SvmEngine::new(storage);
-
-    let deps = Dependencies::new(svm);
+    let svm = Arc::new(SvmEngine::new(storage.clone()));
 
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(deps.clone())) // Share dependencies
+            .app_data(web::Data::new(svm.clone())) // Share dependencies
             .wrap(middleware::Logger::default())
             .wrap(
                 Cors::default()

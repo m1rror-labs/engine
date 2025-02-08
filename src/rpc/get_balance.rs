@@ -2,14 +2,17 @@ use serde_json::Value;
 use solana_sdk::message::AddressLoader;
 use uuid::Uuid;
 
-use crate::{engine::SVM, storage::Storage};
+use crate::{
+    engine::{SvmEngine, SVM},
+    storage::Storage,
+};
 
-use super::rpc::{parse_pubkey, Dependencies, RpcRequest};
+use super::rpc::{parse_pubkey, RpcRequest};
 
 pub fn get_balance<T: Storage + AddressLoader>(
     id: Uuid,
     req: &RpcRequest,
-    deps: &Dependencies<T>,
+    svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
     let pubkey_str = match req
         .params
@@ -27,7 +30,6 @@ pub fn get_balance<T: Storage + AddressLoader>(
     };
     let pubkey = parse_pubkey(pubkey_str)?;
 
-    let svm = deps.svm.read().unwrap();
     match svm.get_balance(id, &pubkey) {
         Ok(balance) => match balance {
             Some(balance) => Ok(serde_json::json!({

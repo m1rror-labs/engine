@@ -1,13 +1,16 @@
 use serde_json::Value;
 use solana_sdk::message::AddressLoader;
 
-use crate::{engine::SVM, storage::Storage};
+use crate::{
+    engine::{SvmEngine, SVM},
+    storage::Storage,
+};
 
-use super::rpc::{Dependencies, RpcRequest};
+use super::rpc::RpcRequest;
 
 pub fn get_minimum_balance_for_rent_exemption<T: Storage + AddressLoader>(
     req: &RpcRequest,
-    deps: &Dependencies<T>,
+    svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
     let size = match req
         .params
@@ -23,8 +26,6 @@ pub fn get_minimum_balance_for_rent_exemption<T: Storage + AddressLoader>(
             }));
         }
     };
-
-    let svm = deps.svm.write().unwrap();
 
     let balance = svm.minimum_balance_for_rent_exemption(size);
     Ok(Value::Number(balance.into()))
