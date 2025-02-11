@@ -16,7 +16,7 @@ RUN cargo build --release
 # Use a minimal base image for the final stage
 FROM debian:bookworm-slim
 
-# Install OpenSSL
+# Install dependencies for building RocksDB and libclang
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -27,8 +27,13 @@ RUN apt-get update && apt-get install -y \
     libzstd-dev \
     libssl-dev \
     libpq5 \
-    ca-certificates && \
+    ca-certificates \
+    clang \
+    libclang-dev && \
     rm -rf /var/lib/apt/lists/*
+
+# Set the LIBCLANG_PATH environment variable
+ENV LIBCLANG_PATH=/usr/lib/llvm-11/lib
 
 # Set the working directory inside the container
 WORKDIR /usr/src/myapp
