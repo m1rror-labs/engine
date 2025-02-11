@@ -29,11 +29,12 @@ RUN apt-get update && apt-get install -y \
     libpq5 \
     ca-certificates \
     clang \
+    llvm-dev \
     libclang-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Set the LIBCLANG_PATH environment variable
-ENV LIBCLANG_PATH=/usr/lib/llvm-11/lib
+ENV LIBCLANG_PATH=/usr/lib/llvm-13/lib
 
 # Set the working directory inside the container
 WORKDIR /usr/src/myapp
