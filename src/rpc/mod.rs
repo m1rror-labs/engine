@@ -1,6 +1,12 @@
 pub mod get_account_info;
 pub mod get_balance;
+pub mod get_block;
+pub mod get_block_commitment;
+pub mod get_block_height;
+pub mod get_fee_for_message;
+pub mod get_genesis_hash;
 pub mod get_health;
+pub mod get_identity;
 pub mod get_latest_blockhash;
 pub mod get_minimum_balance_for_rent_exemption;
 pub mod get_version;

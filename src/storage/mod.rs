@@ -43,10 +43,11 @@ pub trait Storage {
 
     fn set_block(&self, id: Uuid, block: Block) -> Result<(), String>;
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String>;
-    fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Block, String>;
+    fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Option<Block>, String>;
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
 
     fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String>;
+    fn set_blockchain(&self, blockchain: &Blockchain) -> Result<Uuid, String>;
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String>;
     fn get_transaction(
@@ -87,6 +88,20 @@ impl Storage for PgStorage {
             .first::<DbBlockchain>(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(blockchain.to_blockchain())
+    }
+
+    fn set_blockchain(&self, blockchain: &Blockchain) -> Result<Uuid, String> {
+        let mut conn = self.get_connection()?;
+        let db_blockchain = DbBlockchain {
+            id: blockchain.id,
+            created_at: blockchain.created_at,
+            airdrop_keypair: blockchain.airdrop_keypair.to_bytes().to_vec(),
+        };
+        diesel::insert_into(crate::schema::blockchain::table)
+            .values(&db_blockchain)
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(blockchain.id)
     }
 
     fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String> {
@@ -203,14 +218,19 @@ impl Storage for PgStorage {
         Ok(block.into_block().0)
     }
 
-    fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Block, String> {
+    //TODO: Need to do a join on transactions to get the transactions for the block
+    fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Option<Block>, String> {
         let mut conn = self.get_connection()?;
-        let block: DbBlock = crate::schema::blocks::table
+        let block: Option<DbBlock> = crate::schema::blocks::table
             .filter(crate::schema::blocks::block_height.eq(height as i64))
             .filter(crate::schema::blocks::blockchain.eq(id))
             .first(&mut conn)
+            .optional()
             .map_err(|e| e.to_string())?;
-        Ok(block.into_block().0)
+        match block {
+            Some(block) => Ok(Some(block.into_block().0)),
+            None => Ok(None),
+        }
     }
 
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String> {

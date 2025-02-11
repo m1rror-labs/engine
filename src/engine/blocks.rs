@@ -1,6 +1,8 @@
+use serde::Serialize;
 use solana_sdk::{hash::Hash, signature::Keypair, transaction::VersionedTransaction};
 use uuid::Uuid;
 
+#[derive(Serialize)]
 pub struct Block {
     pub blockhash: Hash,          // Hash of this block
     pub previous_blockhash: Hash, // Hash of the block preceding this block

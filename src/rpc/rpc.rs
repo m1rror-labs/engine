@@ -10,7 +10,9 @@ use uuid::Uuid;
 use crate::{engine::SvmEngine, storage::Storage};
 
 use super::{
-    get_account_info::get_account_info, get_balance::get_balance, get_health::get_health,
+    get_account_info::get_account_info, get_balance::get_balance, get_block::get_block,
+    get_block_commitment::get_block_commitment, get_block_height::get_block_height,
+    get_genesis_hash::get_genesis_hash, get_health::get_health, get_identity::get_identity,
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_version::get_version, is_blockhash_valid::is_blockhash_valid,
@@ -100,96 +102,79 @@ pub fn handle_request<T: Storage + Clone>(
     let result = match req.method {
         RpcMethod::GetAccountInfo => get_account_info(id, &req, svm),
         RpcMethod::GetBalance => get_balance(id, &req, svm),
-        RpcMethod::GetBlock => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        RpcMethod::GetBlock => get_block(id, &req, svm),
+        RpcMethod::GetBlockCommitment => get_block_commitment(id, &req, svm),
+        RpcMethod::GetBlockHeight => get_block_height(id, svm),
+        RpcMethod::GetBlockProduction => Ok(serde_json::json!({
+                "context": {
+                  "slot": 9887
+                },
+                "value": {
+                  "byIdentity": {
+                    "85iYT5RuzRTDgjyRa3cP8SYhM2j21fj7NhfJ3peu1DPr": [9888, 9886]
+                  },
+                  "range": {
+                    "firstSlot": 0,
+                    "lastSlot": 9887
+                  }
+                }
         })),
-        RpcMethod::GetBlockCommitment => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        RpcMethod::GetBlocks => Ok(serde_json::json!([5, 6, 7, 8, 9, 10])),
+        RpcMethod::GetBlocksWithLimit => Ok(serde_json::json!([5, 6, 7, 8, 9, 10])),
+        RpcMethod::GetBlockTime => Ok(serde_json::json!(1574721591)),
+        RpcMethod::GetClusterNodes => Ok(serde_json::json!([])),
+        RpcMethod::GetEpochInfo => Ok(serde_json::json!({
+                "absoluteSlot": 166598,
+                "blockHeight": 166500,
+                "epoch": 27,
+                "slotIndex": 2790,
+                "slotsInEpoch": 8192,
+                "transactionCount": 22661093
         })),
-        RpcMethod::GetBlockHeight => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        RpcMethod::GetEpochSchedule => Ok(serde_json::json!({
+                "firstNormalEpoch": 8,
+                "firstNormalSlot": 8160,
+                "leaderScheduleSlotOffset": 8192,
+                "slotsPerEpoch": 8192,
+                "warmup": true
         })),
-        RpcMethod::GetBlockProduction => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        RpcMethod::GetFeeForMessage => Ok(serde_json::json!({
+            "context": { "slot": 5068 }, "value": 5000
         })),
-        RpcMethod::GetBlocks => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetBlocksWithLimit => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetBlockTime => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetClusterNodes => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetEpochInfo => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetEpochSchedule => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetFeeForMessage => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetFirstAvailableBlock => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetGenesisHash => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetFirstAvailableBlock => Ok(serde_json::json!(250000)),
+        RpcMethod::GetGenesisHash => get_genesis_hash(id, svm),
         RpcMethod::GetHealth => get_health(),
         RpcMethod::GetHighestSnapshotSlot => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+             "code": -32008, "message": "No snapshot"
         })),
-        RpcMethod::GetIdentity => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        RpcMethod::GetIdentity => get_identity(id, svm),
+        RpcMethod::GetInflationGovernor => Ok(serde_json::json!({
+            "foundation": 0.05,
+            "foundationTerm": 7,
+            "initial": 0.15,
+            "taper": 0.15,
+            "terminal": 0.015
         })),
-        RpcMethod::GetInflationGovernor => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        RpcMethod::GetInflationRate => Ok(serde_json::json!({
+            "epoch": 100,
+            "foundation": 0.001,
+            "total": 0.149,
+            "validator": 0.148
         })),
-        RpcMethod::GetInflationRate => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetInflationReward => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        RpcMethod::GetInflationReward => Ok(serde_json::json!({
+                "amount": 2500,
+                "effectiveSlot": 224,
+                "epoch": 2,
+                "postBalance": 499999,
         })),
         RpcMethod::GetLargestAccounts => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
         RpcMethod::GetLatestBlockhash => get_latest_blockhash(id, svm),
-        RpcMethod::GetLeaderSchedule => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetMaxRetransmitSlot => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetMaxShredInsertSlot => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetLeaderSchedule => Ok(serde_json::json!(null)),
+        RpcMethod::GetMaxRetransmitSlot => get_block_height(id, svm),
+        RpcMethod::GetMaxShredInsertSlot => get_block_height(id, svm),
         RpcMethod::GetMinimumBalanceForRentExemption => {
             get_minimum_balance_for_rent_exemption(&req, svm)
         }

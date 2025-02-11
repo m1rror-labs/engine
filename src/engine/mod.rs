@@ -1,4 +1,4 @@
-use blocks::Block;
+use blocks::{Block, Blockchain};
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use solana_compute_budget::compute_budget::ComputeBudget;
@@ -25,7 +25,7 @@ use solana_sdk::{
     pubkey::Pubkey,
     rent::Rent,
     reserved_account_keys::ReservedAccountKeys,
-    signature::Signature,
+    signature::{Keypair, Signature},
     signer::Signer,
     system_instruction, system_program,
     sysvar::{self, instructions::construct_instructions_data},
@@ -45,8 +45,16 @@ pub mod transactions;
 
 pub trait SVM<T: Storage + Clone> {
     fn new(storage: T) -> Self;
+
+    fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String>;
+
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
     fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
+    fn get_block(&self, id: Uuid, slot_number: &u64) -> Result<Option<Block>, String>;
+    fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
+    fn get_fee_for_message(&self, message: &SanitizedMessage) -> u64;
+    fn get_genesis_hash(&self, id: Uuid) -> Result<Hash, String>;
+    fn get_identity(&self, id: Uuid) -> Result<Pubkey, String>;
     fn latest_blockhash(&self, id: Uuid) -> Result<String, String>;
     fn current_block(&self, id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
@@ -74,6 +82,21 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         }
     }
 
+    fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String> {
+        let keypair = match airdrop_keypair {
+            Some(k) => k,
+            None => Keypair::new(),
+        };
+
+        let blockchain = Blockchain {
+            id: Uuid::new_v4(),
+            created_at: Utc::now().naive_utc(),
+            airdrop_keypair: keypair,
+        };
+
+        self.storage.set_blockchain(&blockchain)
+    }
+
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String> {
         self.storage.get_account(id, pubkey)
     }
@@ -83,6 +106,38 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             Some(account) => Ok(Some(account.lamports)),
             None => Ok(None),
         }
+    }
+
+    fn get_block(&self, id: Uuid, slot_number: &u64) -> Result<Option<Block>, String> {
+        self.storage.get_block_by_height(id, slot_number.to_owned())
+    }
+
+    fn get_latest_block(&self, id: Uuid) -> Result<Block, String> {
+        self.storage.get_latest_block(id)
+    }
+
+    fn get_fee_for_message(&self, message: &SanitizedMessage) -> u64 {
+        solana_fee::calculate_fee(
+            message,
+            false,
+            self.fee_structure.lamports_per_signature,
+            0,
+            self.feature_set
+                .is_active(&remove_rounding_in_fee_calculation::id()),
+        )
+    }
+
+    fn get_genesis_hash(&self, id: Uuid) -> Result<Hash, String> {
+        let block = self.get_block(id, &0)?;
+        match block {
+            Some(block) => Ok(block.blockhash),
+            None => Err("Genesis block not found".to_string()),
+        }
+    }
+
+    fn get_identity(&self, id: Uuid) -> Result<Pubkey, String> {
+        let blockchain = self.storage.get_blockchain(id)?;
+        Ok(blockchain.airdrop_keypair.pubkey())
     }
 
     fn latest_blockhash(&self, id: Uuid) -> Result<String, String> {

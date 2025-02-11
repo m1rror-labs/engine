@@ -10,12 +10,13 @@ use mockchain_engine::{
     storage::{self, PgStorage},
 };
 
+use serde_json::json;
 use uuid::Uuid;
 
-#[post("/{id}")]
+#[post("/rpc/{id}")]
 async fn rpc_reqest(
     req: web::Json<RpcRequest>,
-    svm: web::Data<SvmEngine<PgStorage>>,
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
 ) -> impl Responder {
     let id = path.into_inner();
@@ -23,11 +24,23 @@ async fn rpc_reqest(
     HttpResponse::Ok().json(res)
 }
 
+#[post("/blockchain")]
+async fn create_blockchain(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
+    print!("Creating blockchain");
+    let id = svm.create_blockchain(None);
+    match id {
+        Ok(id) => HttpResponse::Ok().json(json!({
+            id: id.to_string()
+        })),
+        Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-
-    env_logger::init_from_env(Env::default().default_filter_or("info"));
+    std::env::set_var("RUST_LOG", "debug");
+    env_logger::init();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let storage = storage::PgStorage::new(&database_url);
@@ -45,6 +58,7 @@ async fn main() -> std::io::Result<()> {
                     .supports_credentials(),
             )
             .service(rpc_reqest)
+            .service(create_blockchain)
     })
     .bind(("0.0.0.0", 8080))?
     .run()
