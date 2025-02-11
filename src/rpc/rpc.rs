@@ -15,8 +15,10 @@ use super::{
     get_genesis_hash::get_genesis_hash, get_health::get_health, get_identity::get_identity,
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
-    get_version::get_version, is_blockhash_valid::is_blockhash_valid,
-    request_airdrop::request_airdrop, send_transaction::send_transaction,
+    get_multiple_accounts::get_multiple_accounts,
+    get_signatures_for_address::get_signatures_for_address, get_version::get_version,
+    is_blockhash_valid::is_blockhash_valid, request_airdrop::request_airdrop,
+    send_transaction::send_transaction,
 };
 
 #[derive(Deserialize, Debug)]
@@ -74,6 +76,8 @@ pub enum RpcMethod {
     RequestAirdrop,
     SendTransaction,
     SimulateTransaction,
+
+    GetAsset,
 }
 
 #[derive(Deserialize, Debug)]
@@ -124,12 +128,12 @@ pub fn handle_request<T: Storage + Clone>(
         RpcMethod::GetBlockTime => Ok(serde_json::json!(1574721591)),
         RpcMethod::GetClusterNodes => Ok(serde_json::json!([])),
         RpcMethod::GetEpochInfo => Ok(serde_json::json!({
-                "absoluteSlot": 166598,
-                "blockHeight": 166500,
-                "epoch": 27,
-                "slotIndex": 2790,
-                "slotsInEpoch": 8192,
-                "transactionCount": 22661093
+            "absoluteSlot": 360253902,
+            "blockHeight": 348253772,
+            "epoch": 833,
+            "slotIndex": 397902,
+            "slotsInEpoch": 432000,
+            "transactionCount": 151130291,
         })),
         RpcMethod::GetEpochSchedule => Ok(serde_json::json!({
                 "firstNormalEpoch": 8,
@@ -141,7 +145,7 @@ pub fn handle_request<T: Storage + Clone>(
         RpcMethod::GetFeeForMessage => Ok(serde_json::json!({
             "context": { "slot": 5068 }, "value": 5000
         })),
-        RpcMethod::GetFirstAvailableBlock => Ok(serde_json::json!(250000)),
+        RpcMethod::GetFirstAvailableBlock => Ok(serde_json::json!(0)),
         RpcMethod::GetGenesisHash => get_genesis_hash(id, svm),
         RpcMethod::GetHealth => get_health(),
         RpcMethod::GetHighestSnapshotSlot => Err(serde_json::json!({
@@ -178,49 +182,55 @@ pub fn handle_request<T: Storage + Clone>(
         RpcMethod::GetMinimumBalanceForRentExemption => {
             get_minimum_balance_for_rent_exemption(&req, svm)
         }
-        RpcMethod::GetMultipleAccounts => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetMultipleAccounts => get_multiple_accounts(id, &req, svm),
         RpcMethod::GetProgramAccounts => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetRecentPerformanceSamples => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetRecentPrioritizationFees => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetSignaturesForAddress => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetRecentPerformanceSamples => Ok(serde_json::json!([{
+          "numSlots": 126,
+          "numTransactions": 126,
+          "numNonVoteTransactions": 1,
+          "samplePeriodSecs": 60,
+          "slot": 348125
+        }])),
+        RpcMethod::GetRecentPrioritizationFees => Err(serde_json::json!([{
+          "slot": 348125,
+          "prioritizationFee": 0
+        }])),
+        RpcMethod::GetSignaturesForAddress => get_signatures_for_address(id, &req, svm),
         RpcMethod::GetSignatureStatuses => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetSlot => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
-        RpcMethod::GetSlotLeader => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetSlot => get_block_height(id, svm),
+        RpcMethod::GetSlotLeader => get_identity(id, svm),
         RpcMethod::GetSlotLeaders => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
         RpcMethod::GetStakeMinimumDelegation => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+            "context": {
+                "slot": 501
+              },
+              "value": 1000000000
         })),
-        RpcMethod::GetSupply => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        //TODO: fix this
+        RpcMethod::GetSupply => Ok(serde_json::json!({
+            "context": {
+                "slot": 1114
+              },
+              "value": {
+                "circulating": 16000,
+                "nonCirculating": 1000000,
+                "nonCirculatingAccounts": [
+                  "FEy8pTbP5fEoqMV1GdTz83byuA8EKByqYat1PKDgVAq5",
+                  "9huDUZfxoJ7wGMTffUE7vh1xePqef7gyrLJu9NApncqA",
+                  "3mi1GmwEE3zo2jmfDuzvjSX9ovRXsDUKHvsntpkhuLJ9",
+                  "BYxEJTDerkaRWBem3XgnVcdhppktBXa2HbkHPKj2Ui4Z"
+                ],
+                "total": 1016000
+              }
         })),
         RpcMethod::GetTokenAccountBalance => Err(serde_json::json!({
             "code": -32601,
@@ -265,6 +275,14 @@ pub fn handle_request<T: Storage + Clone>(
         RpcMethod::SimulateTransaction => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
+        })),
+        RpcMethod::GetAsset => Err(serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32000,
+                    "message": "Database Error: RecordNotFound Error: Asset Not Found"
+                },
+                "id": "A5JxZVHgXe7fn5TqJXm6Hj2zKh1ptDapae2YjtXbZJoy"
         })),
     };
 

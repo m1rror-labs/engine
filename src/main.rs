@@ -29,7 +29,7 @@ async fn create_blockchain(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Re
     let id = svm.create_blockchain(None);
     match id {
         Ok(id) => HttpResponse::Ok().json(json!({
-            id: id.to_string()
+            "id": id.to_string()
         })),
         Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
     }

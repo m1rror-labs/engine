@@ -38,7 +38,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr, sync::Arc};
 use transactions::TransactionMetadata;
 use uuid::Uuid;
 
-use crate::storage::Storage;
+use crate::storage::{transactions::DbTransaction, Storage};
 
 pub mod blocks;
 pub mod transactions;
@@ -49,12 +49,23 @@ pub trait SVM<T: Storage + Clone> {
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String>;
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
+    fn get_transactions_for_address(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+        limit: Option<usize>,
+    ) -> Result<Vec<DbTransaction>, String>;
     fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
     fn get_block(&self, id: Uuid, slot_number: &u64) -> Result<Option<Block>, String>;
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
     fn get_fee_for_message(&self, message: &SanitizedMessage) -> u64;
     fn get_genesis_hash(&self, id: Uuid) -> Result<Hash, String>;
     fn get_identity(&self, id: Uuid) -> Result<Pubkey, String>;
+    fn get_multiple_accounts(
+        &self,
+        id: Uuid,
+        pubkeys: &Vec<&Pubkey>,
+    ) -> Result<Vec<Option<Account>>, String>;
     fn latest_blockhash(&self, id: Uuid) -> Result<String, String>;
     fn current_block(&self, id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
@@ -94,11 +105,38 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             airdrop_keypair: keypair,
         };
 
-        self.storage.set_blockchain(&blockchain)
+        let id = self.storage.set_blockchain(&blockchain)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(id.as_bytes());
+        let hash_array = hasher.finalize();
+        let hash = Hash::new_from_array(hash_array.into());
+        self.storage.set_block(
+            id,
+            Block {
+                blockhash: hash,
+                block_time: 0,
+                previous_blockhash: Hash::default(),
+                block_height: 0,
+                parent_slot: 0,
+                transactions: vec![],
+            },
+        )?;
+
+        Ok(id)
     }
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String> {
         self.storage.get_account(id, pubkey)
+    }
+
+    fn get_transactions_for_address(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+        limit: Option<usize>,
+    ) -> Result<Vec<DbTransaction>, String> {
+        self.storage.get_transactions_for_address(id, pubkey, limit)
     }
 
     fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String> {
@@ -138,6 +176,14 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
     fn get_identity(&self, id: Uuid) -> Result<Pubkey, String> {
         let blockchain = self.storage.get_blockchain(id)?;
         Ok(blockchain.airdrop_keypair.pubkey())
+    }
+
+    fn get_multiple_accounts(
+        &self,
+        id: Uuid,
+        pubkeys: &Vec<&Pubkey>,
+    ) -> Result<Vec<Option<Account>>, String> {
+        self.storage.get_accounts(id, pubkeys)
     }
 
     fn latest_blockhash(&self, id: Uuid) -> Result<String, String> {

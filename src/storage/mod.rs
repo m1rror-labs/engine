@@ -55,6 +55,12 @@ pub trait Storage {
         id: Uuid,
         signature: &Signature,
     ) -> Result<Option<Transaction>, String>;
+    fn get_transactions_for_address(
+        &self,
+        id: Uuid,
+        address: &Pubkey,
+        limit: Option<usize>,
+    ) -> Result<Vec<DbTransaction>, String>;
 }
 
 type PgPool = r2d2::Pool<ConnectionManager<PgConnection>>;
@@ -381,5 +387,27 @@ impl Storage for PgStorage {
             transaction_map.into_iter().next().unwrap().1;
 
         Ok(None)
+    }
+
+    fn get_transactions_for_address(
+        &self,
+        id: Uuid,
+        address: &Pubkey,
+        limit: Option<usize>,
+    ) -> Result<Vec<DbTransaction>, String> {
+        let mut conn = self.get_connection()?;
+        let transactions: Vec<DbTransaction> = crate::schema::transactions::table
+            .inner_join(
+                crate::schema::transaction_account_keys::table
+                    .on(crate::schema::transactions::signature
+                        .eq(crate::schema::transaction_account_keys::transaction_signature)),
+            )
+            .filter(crate::schema::transaction_account_keys::account.eq(address.to_string()))
+            .filter(crate::schema::transactions::blockchain.eq(id))
+            .select(crate::schema::transactions::all_columns)
+            .limit(limit.unwrap_or(1000) as i64)
+            .load(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(transactions)
     }
 }
