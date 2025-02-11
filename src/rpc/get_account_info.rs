@@ -34,7 +34,7 @@ pub fn get_account_info<T: Storage + Clone>(
             Some(account) => Ok(serde_json::json!({
                 "context": { "slot": 341197053 },
                 "value": {
-                    "data": account.data,
+                    "data": [ "","base64"],
                     "executable": account.executable,
                     "lamports": account.lamports,
                     "owner": account.owner.to_string(),

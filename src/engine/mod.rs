@@ -12,6 +12,7 @@ use solana_sdk::{
     account::{Account, AccountSharedData, ReadableAccount, WritableAccount},
     account_utils::StateMut,
     address_lookup_table::{self, error::AddressLookupError, state::AddressLookupTable},
+    bpf_loader,
     feature_set::{remove_rounding_in_fee_calculation, FeatureSet},
     fee::FeeStructure,
     hash::Hash,
@@ -34,6 +35,7 @@ use solana_sdk::{
 };
 use solana_svm::message_processor::MessageProcessor;
 use solana_timings::ExecuteTimings;
+use spl::load_spl_programs;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr, sync::Arc}; // Add this import at the top of your file
 use transactions::TransactionMetadata;
 use uuid::Uuid;
@@ -41,6 +43,7 @@ use uuid::Uuid;
 use crate::storage::{transactions::DbTransaction, Storage};
 
 pub mod blocks;
+pub mod spl;
 pub mod transactions;
 
 pub trait SVM<T: Storage + Clone> {
@@ -72,6 +75,8 @@ pub trait SVM<T: Storage + Clone> {
     fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
     fn send_transaction(&self, id: Uuid, tx: VersionedTransaction) -> Result<String, String>;
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<(), String>;
+    fn add_program(&self, id: Uuid, program_id: Pubkey, program_bytes: &[u8])
+        -> Result<(), String>;
 }
 
 pub struct SvmEngine<T: Storage + Clone> {
@@ -122,6 +127,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
                 transactions: vec![],
             },
         )?;
+        load_spl_programs(self, id)?;
 
         Ok(id)
     }
@@ -335,6 +341,25 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
         }
+    }
+
+    fn add_program(
+        &self,
+        id: Uuid,
+        program_id: Pubkey,
+        program_bytes: &[u8],
+    ) -> Result<(), String> {
+        let program_len = program_bytes.len();
+        let lamports = self.minimum_balance_for_rent_exemption(program_len);
+        let account = Account {
+            lamports,
+            data: vec![0; program_len],
+            owner: bpf_loader::id(),
+            executable: true,
+            rent_epoch: 0,
+        };
+        self.storage.set_account(id, &program_id, account, None)?;
+        Ok(())
     }
 }
 

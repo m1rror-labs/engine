@@ -47,11 +47,11 @@ pub fn get_multiple_accounts<T: Storage + Clone>(
             .iter()
             .map(|account| match account {
                 Some(account) => serde_json::json!({
-                        "data": account.data,
+                        "data": [ "","base64"],
                         "executable": account.executable,
                         "lamports": account.lamports,
                         "owner": account.owner.to_string(),
-                        "rentEpoch": account.rent_epoch,
+                        "rentEpoch":1844674407,
                         "space": account.data.len(),
                     }
                 ),
