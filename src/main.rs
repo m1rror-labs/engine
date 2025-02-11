@@ -3,7 +3,6 @@ use std::{env, sync::Arc};
 use actix_cors::Cors;
 use actix_web::{middleware, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
-use env_logger::Env;
 use mockchain_engine::{
     engine::{SvmEngine, SVM},
     rpc::rpc::{handle_request, RpcRequest},

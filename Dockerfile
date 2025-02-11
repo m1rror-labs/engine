@@ -17,7 +17,18 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 
 # Install OpenSSL
-RUN apt-get update && apt-get install -y libssl-dev libpq5 ca-certificates && rm -rf /var/lib/apt/lists/* libpq-dev
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    libsnappy-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    liblz4-dev \
+    libzstd-dev \
+    libssl-dev \
+    libpq5 \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set the working directory inside the container
 WORKDIR /usr/src/myapp
