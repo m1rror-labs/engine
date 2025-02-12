@@ -353,7 +353,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let lamports = self.minimum_balance_for_rent_exemption(program_len);
         let account = Account {
             lamports,
-            data: vec![0; program_len],
+            data: program_bytes.to_vec(),
             owner: bpf_loader::id(),
             executable: true,
             rent_epoch: 0,

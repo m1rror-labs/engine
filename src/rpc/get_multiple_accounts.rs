@@ -40,6 +40,11 @@ pub fn get_multiple_accounts<T: Storage + Clone>(
 
     let pubkeys = pubkeys.iter().map(|v| v).collect();
 
+    let accounts = svm.get_multiple_accounts(id, &pubkeys);
+    accounts.map(|account| {
+        println!("{:?}", account);
+    });
+
     match svm.get_multiple_accounts(id, &pubkeys) {
         Ok(accounts) => Ok(serde_json::json!({
             "context": { "apiVersion": "2.0.15", "slot": 341197247 },
