@@ -16,7 +16,8 @@ use super::{
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_multiple_accounts::get_multiple_accounts,
-    get_signatures_for_address::get_signatures_for_address, get_version::get_version,
+    get_signatures_for_address::get_signatures_for_address,
+    get_transaction_count::get_transaction_count, get_version::get_version,
     is_blockhash_valid::is_blockhash_valid, request_airdrop::request_airdrop,
     send_transaction::send_transaction, simulate_transaction::simulate_transaction,
 };
@@ -256,20 +257,27 @@ pub fn handle_request<T: Storage + Clone>(
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetTransactionCount => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetTransactionCount => get_transaction_count(id, svm),
         RpcMethod::GetVersion => get_version(),
-        RpcMethod::GetVoteAccounts => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
+        RpcMethod::GetVoteAccounts => Ok(serde_json::json!({
+            "current": [
+                {
+                  "commission": 0,
+                  "epochVoteAccount": true,
+                  "epochCredits": [
+                    [1, 64, 0],
+                    [2, 192, 64]
+                  ],
+                  "nodePubkey": "B97CCUW3AEZFGy6uUg6zUdnNYvnVq5VG8PUtb2HayTDD",
+                  "lastVote": 147,
+                  "activatedStake": 42,
+                  "votePubkey": "3ZT31jkAGhUaw8jsy4bTknwBMP8i4Eueh52By4zXcsVw"
+                }
+              ],
+              "delinquent": []
         })),
         RpcMethod::IsBlockhashValid => is_blockhash_valid(id, &req, svm),
-        RpcMethod::MinimumLedgerSlot => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::MinimumLedgerSlot => Ok(serde_json::json!(0)),
         RpcMethod::RequestAirdrop => request_airdrop(id, &req, svm),
         RpcMethod::SendTransaction => send_transaction(id, &req, svm),
         RpcMethod::SimulateTransaction => simulate_transaction(id, &req, svm),

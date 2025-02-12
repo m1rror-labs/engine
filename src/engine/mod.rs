@@ -73,6 +73,7 @@ pub trait SVM<T: Storage + Clone> {
     fn current_block(&self, id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
     fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
+    fn get_transaction_count(&self, id: Uuid) -> Result<u64, String>;
     fn send_transaction(&self, id: Uuid, tx: VersionedTransaction) -> Result<String, String>;
     fn simulate_transaction(
         &self,
@@ -222,6 +223,10 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let duration = now - block_time;
 
         Ok(60 <= duration.num_seconds())
+    }
+
+    fn get_transaction_count(&self, id: Uuid) -> Result<u64, String> {
+        self.storage.get_transaction_count(id)
     }
 
     fn send_transaction(&self, id: Uuid, raw_tx: VersionedTransaction) -> Result<String, String> {

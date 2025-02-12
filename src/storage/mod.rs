@@ -61,6 +61,7 @@ pub trait Storage {
         address: &Pubkey,
         limit: Option<usize>,
     ) -> Result<Vec<DbTransaction>, String>;
+    fn get_transaction_count(&self, id: Uuid) -> Result<u64, String>;
 }
 
 type PgPool = r2d2::Pool<ConnectionManager<PgConnection>>;
@@ -409,5 +410,15 @@ impl Storage for PgStorage {
             .load(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(transactions)
+    }
+
+    fn get_transaction_count(&self, id: Uuid) -> Result<u64, String> {
+        let mut conn = self.get_connection()?;
+        let count: i64 = crate::schema::transactions::table
+            .filter(crate::schema::transactions::blockchain.eq(id))
+            .count()
+            .get_result(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(count as u64)
     }
 }
