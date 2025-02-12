@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use solana_compute_budget::compute_budget::ComputeBudget;
 use solana_log_collector::LogCollector;
+use solana_program::pubkey;
 use solana_program_runtime::{
     invoke_context::{EnvironmentConfig, InvokeContext},
     loaded_programs::ProgramCacheForTxBatch,
@@ -79,6 +80,11 @@ pub trait SVM<T: Storage + Clone> {
     fn current_block(&self, id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
     fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
+    fn get_token_accounts_by_owner(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Vec<(Pubkey, Account)>, String>;
     fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String>;
     fn get_transaction(
         &self,
@@ -235,6 +241,24 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let duration = now - block_time;
 
         Ok(60 <= duration.num_seconds())
+    }
+
+    fn get_token_accounts_by_owner(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Vec<(Pubkey, Account)>, String> {
+        let token_program = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        let token_2022 = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+        let token_accounts = self
+            .storage
+            .get_token_accounts_by_owner(id, pubkey, &token_program);
+        let token_2022_accounts = self
+            .storage
+            .get_token_accounts_by_owner(id, pubkey, &token_2022);
+        let mut accounts = token_accounts?;
+        accounts.extend(token_2022_accounts?);
+        Ok(accounts)
     }
 
     fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String> {

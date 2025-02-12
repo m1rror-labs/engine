@@ -3,9 +3,11 @@ use std::str::FromStr;
 
 use accounts::DbAccount;
 use blocks::{DbBlock, DbBlockchain};
+use diesel::dsl::sql;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
+use diesel::sql_types::{Binary, Bool};
 use diesel::upsert::excluded;
 
 use solana_sdk::instruction::Instruction;
@@ -42,6 +44,12 @@ pub trait Storage {
     fn set_account_lamports(&self, id: Uuid, address: &Pubkey, lamports: u64)
         -> Result<(), String>;
     fn set_accounts(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String>;
+    fn get_token_accounts_by_owner(
+        &self,
+        id: Uuid,
+        owner: &Pubkey,
+        token_program: &Pubkey,
+    ) -> Result<Vec<(Pubkey, Account)>, String>;
 
     fn set_block(&self, id: Uuid, block: Block) -> Result<(), String>;
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String>;
@@ -206,6 +214,30 @@ impl Storage for PgStorage {
             .execute(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    fn get_token_accounts_by_owner(
+        &self,
+        id: Uuid,
+        owner: &Pubkey,
+        token_program: &Pubkey,
+    ) -> Result<Vec<(Pubkey, Account)>, String> {
+        let mut conn = self.get_connection()?;
+        let accounts = crate::schema::accounts::table
+            .filter(crate::schema::accounts::owner.eq(token_program.to_string()))
+            .filter(sql::<Bool>("contains(data, ?)").bind::<Binary, _>(owner.to_bytes().to_vec()))
+            .filter(crate::schema::accounts::blockchain.eq(id))
+            .load::<DbAccount>(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(accounts
+            .iter()
+            .map(|a| {
+                (
+                    Pubkey::from_str(&a.address).unwrap(),
+                    a.clone().into_account(),
+                )
+            })
+            .collect())
     }
 
     fn set_block(&self, id: Uuid, block: Block) -> Result<(), String> {

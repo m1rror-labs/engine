@@ -16,7 +16,8 @@ use super::{
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_multiple_accounts::get_multiple_accounts,
-    get_signatures_for_address::get_signatures_for_address, get_token_supply::get_token_supply,
+    get_signatures_for_address::get_signatures_for_address,
+    get_token_accounts_by_owner::get_token_accounts_by_owner, get_token_supply::get_token_supply,
     get_transaction::get_transaction, get_transaction_count::get_transaction_count,
     get_version::get_version, is_blockhash_valid::is_blockhash_valid,
     request_airdrop::request_airdrop, send_transaction::send_transaction,
@@ -242,10 +243,7 @@ pub fn handle_request<T: Storage + Clone>(
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetTokenAccountsByOwner => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetTokenAccountsByOwner => get_token_accounts_by_owner(id, &req, svm),
         RpcMethod::GetTokenLargestAccounts => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
