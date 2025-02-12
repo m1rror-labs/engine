@@ -115,6 +115,34 @@ impl DbTransactionInstruction {
             })
             .collect()
     }
+
+    pub fn to_instruction(
+        &self,
+        keys: Vec<DbTransactionAccountKey>,
+    ) -> solana_sdk::instruction::Instruction {
+        let accounts = self
+            .accounts
+            .iter()
+            .map(|a| {
+                let key = &keys[*a as usize];
+                solana_sdk::instruction::AccountMeta {
+                    pubkey: solana_sdk::pubkey::Pubkey::new_from_array(
+                        key.account.as_bytes().try_into().unwrap(),
+                    ),
+                    is_signer: key.signer,
+                    is_writable: key.writable,
+                }
+            })
+            .collect();
+        let program_id =
+            solana_sdk::pubkey::Pubkey::new_from_array(self.program_id.clone().try_into().unwrap());
+        let instruction = solana_sdk::instruction::Instruction {
+            program_id,
+            accounts,
+            data: self.data.clone(),
+        };
+        instruction
+    }
 }
 
 #[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]

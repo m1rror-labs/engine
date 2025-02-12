@@ -16,7 +16,7 @@ use super::{
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_multiple_accounts::get_multiple_accounts,
-    get_signatures_for_address::get_signatures_for_address,
+    get_signatures_for_address::get_signatures_for_address, get_transaction::get_transaction,
     get_transaction_count::get_transaction_count, get_version::get_version,
     is_blockhash_valid::is_blockhash_valid, request_airdrop::request_airdrop,
     send_transaction::send_transaction, simulate_transaction::simulate_transaction,
@@ -253,10 +253,7 @@ pub fn handle_request<T: Storage + Clone>(
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetTransaction => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetTransaction => get_transaction(id, &req, svm),
         RpcMethod::GetTransactionCount => get_transaction_count(id, svm),
         RpcMethod::GetVersion => get_version(),
         RpcMethod::GetVoteAccounts => Ok(serde_json::json!({

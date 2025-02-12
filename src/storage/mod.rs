@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use accounts::DbAccount;
 use blocks::{DbBlock, DbBlockchain};
@@ -7,6 +8,7 @@ use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::upsert::excluded;
 
+use solana_sdk::instruction::Instruction;
 use solana_sdk::{
     account::Account, hash::Hash, pubkey::Pubkey, signature::Signature, transaction::Transaction,
 };
@@ -387,7 +389,18 @@ impl Storage for PgStorage {
         let (db_tx, account_keys, instructions, log_messages, metas, signatures) =
             transaction_map.into_iter().next().unwrap().1;
 
-        Ok(None)
+        let instructions = instructions
+            .iter()
+            .map(|i| i.to_instruction(account_keys.clone()))
+            .collect::<Vec<Instruction>>();
+
+        Ok(Some(Transaction {
+            signatures: signatures
+                .into_iter()
+                .map(|s| Signature::from_str(&s.signature).unwrap())
+                .collect(),
+            message: solana_sdk::message::Message::new(&instructions, None),
+        }))
     }
 
     fn get_transactions_for_address(
