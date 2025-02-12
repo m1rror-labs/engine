@@ -40,26 +40,23 @@ pub fn get_multiple_accounts<T: Storage + Clone>(
 
     let pubkeys = pubkeys.iter().map(|v| v).collect();
 
-    let accounts = svm.get_multiple_accounts(id, &pubkeys);
-    accounts.map(|account| {
-        println!("{:?}", account);
-    });
-
     match svm.get_multiple_accounts(id, &pubkeys) {
         Ok(accounts) => Ok(serde_json::json!({
             "context": { "apiVersion": "2.0.15", "slot": 341197247 },
             "value": accounts
             .iter()
             .map(|account| match account {
-                Some(account) => serde_json::json!({
-                        "data": [ "","base64"],
+                Some(account) => {
+                    let data_str = base64::encode(&account.data);
+                    serde_json::json!({
+                        "data": [ data_str,"base64"],
                         "executable": account.executable,
                         "lamports": account.lamports,
                         "owner": account.owner.to_string(),
                         "rentEpoch":1844674407,
                         "space": account.data.len(),
-                    }
-                ),
+                    })
+                },
                 None => serde_json::json!(null),
             })
             .collect::<Vec<_>>(),

@@ -18,7 +18,7 @@ use super::{
     get_multiple_accounts::get_multiple_accounts,
     get_signatures_for_address::get_signatures_for_address, get_version::get_version,
     is_blockhash_valid::is_blockhash_valid, request_airdrop::request_airdrop,
-    send_transaction::send_transaction,
+    send_transaction::send_transaction, simulate_transaction::simulate_transaction,
 };
 
 #[derive(Deserialize, Debug)]
@@ -272,10 +272,7 @@ pub fn handle_request<T: Storage + Clone>(
         })),
         RpcMethod::RequestAirdrop => request_airdrop(id, &req, svm),
         RpcMethod::SendTransaction => send_transaction(id, &req, svm),
-        RpcMethod::SimulateTransaction => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::SimulateTransaction => simulate_transaction(id, &req, svm),
         RpcMethod::GetAsset => Err(serde_json::json!({
                 "jsonrpc": "2.0",
                 "error": {

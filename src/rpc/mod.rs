@@ -16,3 +16,4 @@ pub mod is_blockhash_valid;
 pub mod request_airdrop;
 pub mod rpc;
 pub mod send_transaction;
+pub mod simulate_transaction;
