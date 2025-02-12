@@ -23,6 +23,7 @@ use solana_sdk::{
         AddressLoader, Message, SanitizedMessage, VersionedMessage,
     },
     native_loader, nonce,
+    program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
     reserved_account_keys::ReservedAccountKeys,
@@ -38,7 +39,9 @@ use solana_sdk::{
 use solana_svm::message_processor::MessageProcessor;
 use solana_timings::ExecuteTimings;
 use spl::load_spl_programs;
+use spl_token::state::Mint;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr, sync::Arc}; // Add this import at the top of your file
+use tokens::TokenAmount;
 use transactions::TransactionMetadata;
 use uuid::Uuid;
 
@@ -46,6 +49,7 @@ use crate::storage::{transactions::DbTransaction, Storage};
 
 pub mod blocks;
 pub mod spl;
+pub mod tokens;
 pub mod transactions;
 
 pub trait SVM<T: Storage + Clone> {
@@ -75,6 +79,7 @@ pub trait SVM<T: Storage + Clone> {
     fn current_block(&self, id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
     fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
+    fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String>;
     fn get_transaction(
         &self,
         id: Uuid,
@@ -230,6 +235,27 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let duration = now - block_time;
 
         Ok(60 <= duration.num_seconds())
+    }
+
+    fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String> {
+        let account = self.get_account(id, pubkey)?;
+        if let None = account {
+            return Ok(None);
+        }
+        let account = account.unwrap();
+
+        Mint::unpack_from_slice(account.data.as_slice()).map_or_else(
+            |_| Ok(None),
+            |mint| {
+                Ok(Some(TokenAmount {
+                    amount: mint.supply,
+                    decimals: mint.decimals,
+                    ui_amount: mint.supply as f64 / 10f64.powf(mint.decimals as f64),
+                    ui_amount_string: (mint.supply as f64 / 10f64.powf(mint.decimals as f64))
+                        .to_string(),
+                }))
+            },
+        )
     }
 
     fn get_transaction(
