@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
 use solana_compute_budget::compute_budget::ComputeBudget;
 use solana_log_collector::LogCollector;
-use solana_program::pubkey;
+use solana_program::{last_restart_slot::LastRestartSlot, pubkey};
 use solana_program_runtime::{
     invoke_context::{EnvironmentConfig, InvokeContext},
     loaded_programs::ProgramCacheForTxBatch,
@@ -15,6 +15,9 @@ use solana_sdk::{
     account_utils::StateMut,
     address_lookup_table::{self, error::AddressLookupError, state::AddressLookupTable},
     bpf_loader,
+    clock::Clock,
+    epoch_rewards::EpochRewards,
+    epoch_schedule::EpochSchedule,
     feature_set::{remove_rounding_in_fee_calculation, FeatureSet},
     fee::FeeStructure,
     hash::Hash,
@@ -24,15 +27,19 @@ use solana_sdk::{
         v0::{LoadedAddresses, MessageAddressTableLookup},
         AddressLoader, Message, SanitizedMessage, VersionedMessage,
     },
-    native_loader, nonce,
+    native_loader,
+    native_token::LAMPORTS_PER_SOL,
+    nonce,
     program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
     reserved_account_keys::ReservedAccountKeys,
     signature::{Keypair, Signature},
     signer::Signer,
+    slot_history::SlotHistory,
+    stake_history::StakeHistory,
     system_instruction, system_program,
-    sysvar::{self, instructions::construct_instructions_data},
+    sysvar::{self, instructions::construct_instructions_data, Sysvar, SysvarId},
     transaction::{
         MessageHash, SanitizedTransaction, Transaction, TransactionError, VersionedTransaction,
     },
@@ -59,6 +66,7 @@ pub trait SVM<T: Storage + Clone> {
     fn new(storage: T) -> Self;
 
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String>;
+    fn get_blockchains(&self) -> Result<Vec<Blockchain>, String>;
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
     fn get_transactions_for_address(
@@ -120,13 +128,15 @@ pub struct SvmEngine<T: Storage + Clone> {
 
 impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
     fn new(storage: T) -> Self {
-        SvmEngine {
+        let mut engine = SvmEngine {
             rent: Rent::default(),
             fee_structure: FeeStructure::default(),
             feature_set: FeatureSet::all_enabled(),
             sysvar_cache: SysvarCache::default(),
             storage,
-        }
+        };
+        engine.set_sysvars();
+        engine
     }
 
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String> {
@@ -138,7 +148,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let blockchain = Blockchain {
             id: Uuid::new_v4(),
             created_at: Utc::now().naive_utc(),
-            airdrop_keypair: keypair,
+            airdrop_keypair: keypair.insecure_clone(),
         };
 
         let id = self.storage.set_blockchain(&blockchain)?;
@@ -158,9 +168,25 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
                 transactions: vec![],
             },
         )?;
+        self.storage.set_account(
+            id,
+            &keypair.pubkey(),
+            Account {
+                lamports: 1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL),
+                data: vec![],
+                owner: system_program::id(),
+                executable: false,
+                rent_epoch: 1000000,
+            },
+            None,
+        )?;
         load_spl_programs(self, id)?;
 
         Ok(id)
+    }
+
+    fn get_blockchains(&self) -> Result<Vec<Blockchain>, String> {
+        self.storage.get_blockchains()
     }
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String> {
@@ -578,6 +604,27 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
 }
 
 impl<T: Storage + Clone> SvmEngine<T> {
+    /// Sets the sysvar to the test environment.
+    pub fn set_sysvar<S>(&mut self, sysvar: &S)
+    where
+        S: Sysvar + SysvarId,
+    {
+        let account = AccountSharedData::new_data(1, &sysvar, &solana_sdk::sysvar::id()).unwrap();
+        self.sysvar_cache.fill_missing_entries(|_, set_sysvar| {
+            set_sysvar(account.data());
+        });
+    }
+
+    fn set_sysvars(&mut self) {
+        self.set_sysvar(&Clock::default());
+        self.set_sysvar(&EpochRewards::default());
+        self.set_sysvar(&EpochSchedule::default());
+        self.set_sysvar(&LastRestartSlot::default());
+        self.set_sysvar(&Rent::default());
+        self.set_sysvar(&SlotHistory::default());
+        self.set_sysvar(&StakeHistory::default());
+    }
+
     fn create_transaction_context(
         &self,
         compute_budget: ComputeBudget,
@@ -669,6 +716,7 @@ impl<T: Storage + Clone> SvmEngine<T> {
                         default_account.set_rent_epoch(0);
                         default_account
                     });
+                    println!("{:?}", self.sysvar_cache.get_rent());
                     if !validated_fee_payer
                         && (!message.is_invoked(i) || message.is_instruction_account(i))
                     {

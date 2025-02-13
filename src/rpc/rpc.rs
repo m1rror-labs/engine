@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,7 +25,7 @@ use super::{
     simulate_transaction::simulate_transaction,
 };
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum RpcMethod {
     GetAccountInfo,
@@ -84,7 +84,68 @@ pub enum RpcMethod {
     GetAsset,
 }
 
-#[derive(Deserialize, Debug)]
+impl fmt::Display for RpcMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let method_str = match self {
+            RpcMethod::GetAccountInfo => "GetAccountInfo",
+            RpcMethod::GetBalance => "GetBalance",
+            RpcMethod::GetBlock => "GetBlock",
+            RpcMethod::GetBlockCommitment => "GetBlockCommitment",
+            RpcMethod::GetBlockHeight => "GetBlockHeight",
+            RpcMethod::GetBlockProduction => "GetBlockProduction",
+            RpcMethod::GetBlocks => "GetBlocks",
+            RpcMethod::GetBlocksWithLimit => "GetBlocksWithLimit",
+            RpcMethod::GetBlockTime => "GetBlockTime",
+            RpcMethod::GetClusterNodes => "GetClusterNodes",
+            RpcMethod::GetEpochInfo => "GetEpochInfo",
+            RpcMethod::GetEpochSchedule => "GetEpochSchedule",
+            RpcMethod::GetFeeForMessage => "GetFeeForMessage",
+            RpcMethod::GetFirstAvailableBlock => "GetFirstAvailableBlock",
+            RpcMethod::GetGenesisHash => "GetGenesisHash",
+            RpcMethod::GetHealth => "GetHealth",
+            RpcMethod::GetHighestSnapshotSlot => "GetHighestSnapshotSlot",
+            RpcMethod::GetIdentity => "GetIdentity",
+            RpcMethod::GetInflationGovernor => "GetInflationGovernor",
+            RpcMethod::GetInflationRate => "GetInflationRate",
+            RpcMethod::GetInflationReward => "GetInflationReward",
+            RpcMethod::GetLargestAccounts => "GetLargestAccounts",
+            RpcMethod::GetLatestBlockhash => "GetLatestBlockhash",
+            RpcMethod::GetLeaderSchedule => "GetLeaderSchedule",
+            RpcMethod::GetMaxRetransmitSlot => "GetMaxRetransmitSlot",
+            RpcMethod::GetMaxShredInsertSlot => "GetMaxShredInsertSlot",
+            RpcMethod::GetMinimumBalanceForRentExemption => "GetMinimumBalanceForRentExemption",
+            RpcMethod::GetMultipleAccounts => "GetMultipleAccounts",
+            RpcMethod::GetProgramAccounts => "GetProgramAccounts",
+            RpcMethod::GetRecentPerformanceSamples => "GetRecentPerformanceSamples",
+            RpcMethod::GetRecentPrioritizationFees => "GetRecentPrioritizationFees",
+            RpcMethod::GetSignaturesForAddress => "GetSignaturesForAddress",
+            RpcMethod::GetSignatureStatuses => "GetSignatureStatuses",
+            RpcMethod::GetSlot => "GetSlot",
+            RpcMethod::GetSlotLeader => "GetSlotLeader",
+            RpcMethod::GetSlotLeaders => "GetSlotLeaders",
+            RpcMethod::GetStakeMinimumDelegation => "GetStakeMinimumDelegation",
+            RpcMethod::GetSupply => "GetSupply",
+            RpcMethod::GetTokenAccountBalance => "GetTokenAccountBalance",
+            RpcMethod::GetTokenAccountsByDelegate => "GetTokenAccountsByDelegate",
+            RpcMethod::GetTokenAccountsByOwner => "GetTokenAccountsByOwner",
+            RpcMethod::GetTokenLargestAccounts => "GetTokenLargestAccounts",
+            RpcMethod::GetTokenSupply => "GetTokenSupply",
+            RpcMethod::GetTransaction => "GetTransaction",
+            RpcMethod::GetTransactionCount => "GetTransactionCount",
+            RpcMethod::GetVersion => "GetVersion",
+            RpcMethod::GetVoteAccounts => "GetVoteAccounts",
+            RpcMethod::IsBlockhashValid => "IsBlockhashValid",
+            RpcMethod::MinimumLedgerSlot => "MinimumLedgerSlot",
+            RpcMethod::RequestAirdrop => "RequestAirdrop",
+            RpcMethod::SendTransaction => "SendTransaction",
+            RpcMethod::SimulateTransaction => "SimulateTransaction",
+            RpcMethod::GetAsset => "GetAsset",
+        };
+        write!(f, "{}", method_str)
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct RpcRequest {
     pub jsonrpc: String,
     pub id: serde_json::Value,

@@ -57,6 +57,7 @@ pub trait Storage {
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
 
     fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String>;
+    fn get_blockchains(&self) -> Result<Vec<Blockchain>, String>;
     fn set_blockchain(&self, blockchain: &Blockchain) -> Result<Uuid, String>;
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String>;
@@ -105,6 +106,13 @@ impl Storage for PgStorage {
             .first::<DbBlockchain>(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(blockchain.to_blockchain())
+    }
+    fn get_blockchains(&self) -> Result<Vec<Blockchain>, String> {
+        let mut conn = self.get_connection()?;
+        let blockchains = crate::schema::blockchain::table
+            .load::<DbBlockchain>(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(blockchains.into_iter().map(|b| b.to_blockchain()).collect())
     }
 
     fn set_blockchain(&self, blockchain: &Blockchain) -> Result<Uuid, String> {

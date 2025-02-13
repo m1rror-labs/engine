@@ -1,7 +1,7 @@
 use std::{env, sync::Arc};
 
 use actix_cors::Cors;
-use actix_web::{middleware, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, middleware, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenv::dotenv;
 use mockchain_engine::{
     engine::{SvmEngine, SVM},
@@ -19,17 +19,28 @@ async fn rpc_reqest(
     path: web::Path<Uuid>,
 ) -> impl Responder {
     let id = path.into_inner();
-    let res = handle_request(id, req.into_inner(), &svm);
+    let res = handle_request(id, req.clone(), &svm);
+    println!("{}: {:?}", req.method, res);
     HttpResponse::Ok().json(res)
 }
 
-#[post("/blockchain")]
+#[post("/blockchains")]
 async fn create_blockchain(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
-    print!("Creating blockchain");
     let id = svm.create_blockchain(None);
     match id {
         Ok(id) => HttpResponse::Ok().json(json!({
-            "id": format!("https://rpc.mockchain.app/rpc/{}", id.to_string())
+            "url": format!("https://rpc.mockchain.app/rpc/{}", id.to_string())
+        })),
+        Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+    }
+}
+
+#[get("/blockchains")]
+async fn get_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
+    let res = svm.get_blockchains();
+    match res {
+        Ok(blockchains) => HttpResponse::Ok().json(json!({
+            "blockchains": blockchains.iter().map(|b| format!("https://rpc.mockchain.app/rpc/{}", b.id.to_string())).collect::<Vec<String>>()
         })),
         Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
     }
@@ -58,6 +69,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(rpc_reqest)
             .service(create_blockchain)
+            .service(get_blockchains)
     })
     .bind(("0.0.0.0", 8080))?
     .run()
