@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use serde_json::Value;
 use solana_sdk::account::AccountSharedData;
 use uuid::Uuid;
@@ -39,7 +40,7 @@ pub fn simulate_transaction<T: Storage + Clone>(
 
     match svm.simulate_transaction(id, tx) {
         Ok(res) => {
-            let return_data_str = base64::encode(&res.return_data.data);
+            let return_data_str = BASE64_STANDARD.encode(&res.return_data.data);
             Ok(serde_json::json!({
                 "context": {
                     "slot": 218

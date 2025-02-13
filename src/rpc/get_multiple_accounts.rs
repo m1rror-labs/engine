@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
 use uuid::Uuid;
@@ -47,7 +48,7 @@ pub fn get_multiple_accounts<T: Storage + Clone>(
             .iter()
             .map(|account| match account {
                 Some(account) => {
-                    let data_str = base64::encode(&account.data);
+                    let data_str = BASE64_STANDARD.encode(&account.data);
                     serde_json::json!({
                         "data": [ data_str,"base64"],
                         "executable": account.executable,

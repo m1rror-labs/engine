@@ -6,8 +6,6 @@ use crate::{
     storage::Storage,
 };
 
-use super::rpc::{parse_hash, RpcRequest};
-
 pub fn get_transaction_count<T: Storage + Clone>(
     id: Uuid,
     svm: &SvmEngine<T>,

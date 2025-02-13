@@ -418,7 +418,7 @@ impl Storage for PgStorage {
             return Err("Multiple transactions found with the same signature".to_string());
         }
 
-        let (db_tx, account_keys, instructions, log_messages, metas, signatures) =
+        let (db_tx, account_keys, instructions, _, metas, signatures) =
             transaction_map.into_iter().next().unwrap().1;
 
         let instructions = instructions

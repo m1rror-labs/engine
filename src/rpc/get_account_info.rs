@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -32,7 +33,7 @@ pub fn get_account_info<T: Storage + Clone>(
     match svm.get_account(id, &pubkey) {
         Ok(account) => match account {
             Some(account) => {
-                let data_str = base64::encode(&account.data);
+                let data_str = BASE64_STANDARD.encode(&account.data);
                 Ok(serde_json::json!({
                     "context": { "slot": 341197053 },
                     "value": {
