@@ -17,6 +17,7 @@ use super::{
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_multiple_accounts::get_multiple_accounts,
     get_signatures_for_address::get_signatures_for_address,
+    get_token_account_balance::get_token_account_balance,
     get_token_accounts_by_owner::get_token_accounts_by_owner, get_token_supply::get_token_supply,
     get_transaction::get_transaction, get_transaction_count::get_transaction_count,
     get_version::get_version, is_blockhash_valid::is_blockhash_valid,
@@ -235,10 +236,7 @@ pub fn handle_request<T: Storage + Clone>(
                 "total": 1016000
               }
         })),
-        RpcMethod::GetTokenAccountBalance => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetTokenAccountBalance => get_token_account_balance(id, &req, svm),
         RpcMethod::GetTokenAccountsByDelegate => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",

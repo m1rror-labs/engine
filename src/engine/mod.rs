@@ -40,6 +40,7 @@ use solana_sdk::{
 use solana_svm::message_processor::MessageProcessor;
 use solana_timings::ExecuteTimings;
 use spl::load_spl_programs;
+use spl_token::state::Account as SplAccount;
 use spl_token::state::Mint;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr, sync::Arc}; // Add this import at the top of your file
 use tokens::TokenAmount;
@@ -86,6 +87,11 @@ pub trait SVM<T: Storage + Clone> {
         pubkey: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
     fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String>;
+    fn get_token_account_balance(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Option<TokenAmount>, String>;
     fn get_transaction(
         &self,
         id: Uuid,
@@ -241,6 +247,32 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let duration = now - block_time;
 
         Ok(60 <= duration.num_seconds())
+    }
+
+    fn get_token_account_balance(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Option<TokenAmount>, String> {
+        let account = self.get_account(id, pubkey)?;
+        if let None = account {
+            return Ok(None);
+        }
+        let account = account.unwrap();
+        let spl =
+            SplAccount::unpack_from_slice(account.data.as_slice()).map_err(|e| e.to_string())?;
+        let mint = self.get_account(id, &spl.mint)?;
+        if let None = mint {
+            return Ok(None);
+        }
+        let mint = mint.unwrap();
+        let mint = Mint::unpack_from_slice(mint.data.as_slice()).map_err(|e| e.to_string())?;
+        Ok(Some(TokenAmount {
+            amount: spl.amount,
+            decimals: mint.decimals,
+            ui_amount: spl.amount as f64 / 10f64.powf(mint.decimals as f64),
+            ui_amount_string: (spl.amount as f64 / 10f64.powf(mint.decimals as f64)).to_string(),
+        }))
     }
 
     fn get_token_accounts_by_owner(
