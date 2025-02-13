@@ -10,9 +10,19 @@ pub fn get_latest_blockhash<T: Storage + Clone>(
     id: Uuid,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
-    let blockhash = svm.latest_blockhash(id);
-    Ok(serde_json::json!({
-        "context": { "apiVersion": "2.0.15", "slot": 341197053 },
-        "value": blockhash,
-    }))
+    match svm.latest_blockhash(id) {
+        Ok(blockhash) => Ok(serde_json::json!({
+            "context": {
+                "slot": 2792
+              },
+              "value": {
+                "blockhash": blockhash.blockhash.to_string(),
+                "lastValidBlockHeight": blockhash.block_height+100
+              }
+        })),
+        Err(e) => Err(serde_json::json!({
+            "code": -32000,
+            "message": e.to_string()
+        })),
+    }
 }

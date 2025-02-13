@@ -2077,6 +2077,7 @@ dependencies = [
  "solana-program",
  "solana-program-runtime",
  "solana-sdk",
+ "solana-signature",
  "solana-svm",
  "solana-timings",
  "spl-token",

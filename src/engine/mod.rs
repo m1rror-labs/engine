@@ -86,7 +86,7 @@ pub trait SVM<T: Storage + Clone> {
         id: Uuid,
         pubkeys: &Vec<&Pubkey>,
     ) -> Result<Vec<Option<Account>>, String>;
-    fn latest_blockhash(&self, id: Uuid) -> Result<String, String>;
+    fn latest_blockhash(&self, id: Uuid) -> Result<Block, String>;
     fn current_block(&self, id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
     fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
@@ -113,7 +113,7 @@ pub trait SVM<T: Storage + Clone> {
         id: Uuid,
         tx: VersionedTransaction,
     ) -> Result<TransactionMetadata, String>;
-    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<(), String>;
+    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String>;
     fn add_program(&self, id: Uuid, program_id: Pubkey, program_bytes: &[u8])
         -> Result<(), String>;
 }
@@ -159,7 +159,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let hash = Hash::new_from_array(hash_array.into());
         self.storage.set_block(
             id,
-            Block {
+            &Block {
                 blockhash: hash,
                 block_time: 0,
                 previous_blockhash: Hash::default(),
@@ -177,6 +177,18 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
                 owner: system_program::id(),
                 executable: false,
                 rent_epoch: 1000000,
+            },
+            None,
+        )?;
+        self.storage.set_account(
+            id,
+            &pubkey!("11111111111111111111111111111111"),
+            Account {
+                lamports: 1,
+                data: vec![],
+                owner: pubkey!("NativeLoader1111111111111111111111111111111"),
+                executable: true,
+                rent_epoch: 1000000000,
             },
             None,
         )?;
@@ -249,10 +261,29 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         self.storage.get_accounts(id, pubkeys)
     }
 
-    fn latest_blockhash(&self, id: Uuid) -> Result<String, String> {
+    fn latest_blockhash(&self, id: Uuid) -> Result<Block, String> {
         let block = self.storage.get_latest_block(id)?;
 
-        Ok(block.blockhash.to_string())
+        if self.is_blockhash_valid(id, &block.blockhash)? {
+            return Ok(block);
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(block.blockhash.as_ref());
+        let hash_array = hasher.finalize();
+        let current_blockhash = Hash::new_from_array(hash_array.into());
+        let next_block = Block {
+            blockhash: current_blockhash,
+            block_time: block.block_time + 60,
+            previous_blockhash: block.blockhash,
+            block_height: block.block_height + 1,
+            parent_slot: block.block_height,
+            transactions: vec![],
+        };
+
+        self.storage.set_block(id, &next_block)?;
+
+        Ok(next_block)
     }
 
     fn current_block(&self, id: Uuid) -> Result<Block, String> {
@@ -273,7 +304,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let now = Utc::now();
         let duration = now - block_time;
 
-        Ok(60 <= duration.num_seconds())
+        Ok(120 >= duration.num_seconds())
     }
 
     fn get_token_account_balance(
@@ -416,10 +447,9 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             self.storage
                 .set_account_lamports(id, &payer_key, payer_account.lamports())?;
         }
-
         let context = context.unwrap();
         let (signature, return_data, inner_instructions, post_accounts) =
-            execute_tx_helper(tx.clone(), context.clone());
+            execute_tx_helper(tx.clone(), context);
         let Ok(logs) = Rc::try_unwrap(log_collector).map(|lc| lc.into_inner().messages) else {
             unreachable!("Log collector should not be used after send_transaction returns")
         };
@@ -559,10 +589,11 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         Ok(meta)
     }
 
-    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<(), String> {
+    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
         let blockchain = self.storage.get_blockchain(id)?;
         let payer = blockchain.airdrop_keypair;
         let latest_blockhash = self.latest_blockhash(id)?;
+        let latest_blockhash = latest_blockhash.blockhash.to_string();
         let tx = VersionedTransaction::try_new(
             VersionedMessage::Legacy(Message::new_with_blockhash(
                 &[system_instruction::transfer(
@@ -577,10 +608,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         )
         .unwrap();
 
-        match self.send_transaction(id, tx) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e),
-        }
+        self.send_transaction(id, tx)
     }
 
     fn add_program(
@@ -716,7 +744,6 @@ impl<T: Storage + Clone> SvmEngine<T> {
                         default_account.set_rent_epoch(0);
                         default_account
                     });
-                    println!("{:?}", self.sysvar_cache.get_rent());
                     if !validated_fee_payer
                         && (!message.is_invoked(i) || message.is_instruction_account(i))
                     {
@@ -848,7 +875,7 @@ impl<T: Storage + Clone> SvmEngine<T> {
             transactions: vec![],
         };
 
-        self.storage.set_block(id, next_block)?;
+        self.storage.set_block(id, &next_block)?;
         Ok(())
     }
 }

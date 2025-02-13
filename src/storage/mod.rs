@@ -51,7 +51,7 @@ pub trait Storage {
         token_program: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
 
-    fn set_block(&self, id: Uuid, block: Block) -> Result<(), String>;
+    fn set_block(&self, id: Uuid, block: &Block) -> Result<(), String>;
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String>;
     fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Option<Block>, String>;
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
@@ -248,10 +248,10 @@ impl Storage for PgStorage {
             .collect())
     }
 
-    fn set_block(&self, id: Uuid, block: Block) -> Result<(), String> {
+    fn set_block(&self, id: Uuid, block: &Block) -> Result<(), String> {
         let mut conn = self.get_connection()?;
         diesel::insert_into(crate::schema::blocks::table)
-            .values(DbBlock::from_block(&block, id))
+            .values(DbBlock::from_block(block, id))
             .execute(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -326,7 +326,7 @@ impl Storage for PgStorage {
             .execute(&mut conn)
             .map_err(|e| e.to_string())?;
 
-        todo!()
+        Ok(())
     }
 
     fn get_transaction(

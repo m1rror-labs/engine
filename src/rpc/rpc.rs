@@ -158,9 +158,9 @@ pub struct RpcResponse {
     pub jsonrpc: String,
     pub id: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<serde_json::Value>,
+    pub result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<serde_json::Value>,
+    pub error: Option<Value>,
 }
 
 pub fn handle_request<T: Storage + Clone>(

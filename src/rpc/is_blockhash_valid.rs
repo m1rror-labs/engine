@@ -29,8 +29,8 @@ pub fn is_blockhash_valid<T: Storage + Clone>(
     };
     let hash = parse_hash(hash_str)?;
 
-    let latest_hash = svm.latest_blockhash(id)?;
-    if hash.to_string() == latest_hash {
+    let res = svm.is_blockhash_valid(id, &hash)?;
+    if res {
         Ok(serde_json::json!({
             "context": { "slot": 341197053 },
             "value": true,

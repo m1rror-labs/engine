@@ -44,15 +44,11 @@ pub fn request_airdrop<T: Storage + Clone>(
         }
     };
 
-    if let Err(e) = svm.airdrop(id, &pubkey, lamports) {
-        return Err(serde_json::json!({
-            "code": -32602,
-            "message": e.to_string(),
-        }));
+    match svm.airdrop(id, &pubkey, lamports) {
+        Ok(sig) => Ok(serde_json::json!(sig.to_string())),
+        Err(e) => Err(serde_json::json!({
+            "code": -32000,
+            "message": e.to_string()
+        })),
     }
-
-    Err(serde_json::json!({
-        "code": -32602,
-        "message": "Failed to airdrop",
-    }))
 }
