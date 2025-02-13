@@ -10,6 +10,7 @@ pub mod get_identity;
 pub mod get_latest_blockhash;
 pub mod get_minimum_balance_for_rent_exemption;
 pub mod get_multiple_accounts;
+pub mod get_signature_statuses;
 pub mod get_signatures_for_address;
 pub mod get_token_account_balance;
 pub mod get_token_accounts_by_owner;

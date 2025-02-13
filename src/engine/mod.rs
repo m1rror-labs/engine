@@ -1,6 +1,7 @@
 use blocks::{Block, Blockchain};
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
+use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
 use solana_compute_budget::compute_budget::ComputeBudget;
 use solana_log_collector::LogCollector;
 use solana_program::pubkey;
@@ -96,7 +97,7 @@ pub trait SVM<T: Storage + Clone> {
         &self,
         id: Uuid,
         signature: &Signature,
-    ) -> Result<Option<Transaction>, String>;
+    ) -> Result<Option<(Transaction, TransactionStatus)>, String>;
     fn get_transaction_count(&self, id: Uuid) -> Result<u64, String>;
     fn send_transaction(&self, id: Uuid, tx: VersionedTransaction) -> Result<String, String>;
     fn simulate_transaction(
@@ -318,8 +319,21 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         &self,
         id: Uuid,
         signature: &Signature,
-    ) -> Result<Option<Transaction>, String> {
-        self.storage.get_transaction(id, signature)
+    ) -> Result<Option<(Transaction, TransactionStatus)>, String> {
+        let res = self.storage.get_transaction(id, signature)?;
+        if res == None {
+            return Ok(None);
+        }
+        let (tx, slot, tx_res, created_at) = res.unwrap();
+        Ok(Some((
+            tx,
+            TransactionStatus {
+                slot,
+                confirmations: None,
+                err: tx_res.map(|_| TransactionError::InsufficientFundsForFee), //TODO: This is wrong
+                confirmation_status: Some(tx_confirmation_status(created_at.and_utc())),
+            },
+        )))
     }
 
     fn get_transaction_count(&self, id: Uuid) -> Result<u64, String> {
@@ -1097,5 +1111,17 @@ impl<T: Storage + Clone> Loader<T> {
         } else {
             Err(AddressLookupError::InvalidAccountOwner)
         }
+    }
+}
+
+fn tx_confirmation_status(time: chrono::DateTime<Utc>) -> TransactionConfirmationStatus {
+    let now = Utc::now();
+    let duration = now - time;
+    if duration.num_seconds() < 60 {
+        TransactionConfirmationStatus::Finalized
+    } else if duration.num_seconds() < 120 {
+        TransactionConfirmationStatus::Confirmed
+    } else {
+        TransactionConfirmationStatus::Processed
     }
 }

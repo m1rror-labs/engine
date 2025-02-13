@@ -15,7 +15,7 @@ use super::{
     get_genesis_hash::get_genesis_hash, get_health::get_health, get_identity::get_identity,
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
-    get_multiple_accounts::get_multiple_accounts,
+    get_multiple_accounts::get_multiple_accounts, get_signature_statuses::get_signature_statuses,
     get_signatures_for_address::get_signatures_for_address,
     get_token_account_balance::get_token_account_balance,
     get_token_accounts_by_owner::get_token_accounts_by_owner, get_token_supply::get_token_supply,
@@ -203,10 +203,7 @@ pub fn handle_request<T: Storage + Clone>(
           "prioritizationFee": 0
         }])),
         RpcMethod::GetSignaturesForAddress => get_signatures_for_address(id, &req, svm),
-        RpcMethod::GetSignatureStatuses => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetSignatureStatuses => get_signature_statuses(id, &req, svm),
         RpcMethod::GetSlot => get_block_height(id, svm),
         RpcMethod::GetSlotLeader => get_identity(id, svm),
         RpcMethod::GetSlotLeaders => Err(serde_json::json!({

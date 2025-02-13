@@ -64,7 +64,7 @@ pub trait Storage {
         &self,
         id: Uuid,
         signature: &Signature,
-    ) -> Result<Option<Transaction>, String>;
+    ) -> Result<Option<(Transaction, u64, Option<String>, chrono::NaiveDateTime)>, String>;
     fn get_transactions_for_address(
         &self,
         id: Uuid,
@@ -325,7 +325,7 @@ impl Storage for PgStorage {
         &self,
         id: Uuid,
         signature: &Signature,
-    ) -> Result<Option<Transaction>, String> {
+    ) -> Result<Option<(Transaction, u64, Option<String>, chrono::NaiveDateTime)>, String> {
         let mut conn = self.get_connection()?;
 
         let res: Vec<(
@@ -426,13 +426,20 @@ impl Storage for PgStorage {
             .map(|i| i.to_instruction(account_keys.clone()))
             .collect::<Vec<Instruction>>();
 
-        Ok(Some(Transaction {
-            signatures: signatures
-                .into_iter()
-                .map(|s| Signature::from_str(&s.signature).unwrap())
-                .collect(),
-            message: solana_sdk::message::Message::new(&instructions, None),
-        }))
+        let tx_meta = metas.first().ok_or_else(|| "No meta found".to_string())?;
+
+        Ok(Some((
+            Transaction {
+                signatures: signatures
+                    .into_iter()
+                    .map(|s| Signature::from_str(&s.signature).unwrap())
+                    .collect(),
+                message: solana_sdk::message::Message::new(&instructions, None),
+            },
+            db_tx.slot as u64,
+            tx_meta.to_owned().err,
+            db_tx.created_at,
+        )))
     }
 
     fn get_transactions_for_address(

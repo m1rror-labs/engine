@@ -31,10 +31,10 @@ pub fn get_transaction<T: Storage + Clone>(
 
     match svm.get_transaction(id, &signature) {
         Ok(transaction) => match transaction {
-            Some(transaction) => Ok(serde_json::json!({
+            Some((transaction, status)) => Ok(serde_json::json!({
                 "context": { "slot": 341197053 },
                 "value": {
-                    "slot": 123, //TODO: I have it, just need to pass it down via the data structure
+                    "slot": status.slot,
                     "transaction": {
                         "message": {
                             "accountKeys": transaction.message.account_keys.iter().map(|key| key.to_string()).collect::<Vec<String>>(),
