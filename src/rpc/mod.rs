@@ -23,3 +23,4 @@ pub mod request_airdrop;
 pub mod rpc;
 pub mod send_transaction;
 pub mod simulate_transaction;
+pub mod ws;

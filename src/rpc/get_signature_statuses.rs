@@ -54,7 +54,7 @@ pub fn get_signature_statuses<T: Storage + Clone>(
                           "confirmations": null,
                           "err": status.err,
                           "status": status_value,
-                          "confirmationStatus": "finalized"
+                          "confirmationStatus": status.confirmation_status,
                         },
                         null
                       ]

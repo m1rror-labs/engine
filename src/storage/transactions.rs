@@ -1,8 +1,10 @@
 use diesel::prelude::*;
+use solana_sdk::pubkey::Pubkey;
 use solana_sdk::{
     account::ReadableAccount,
     transaction::{Legacy, TransactionVersion},
 };
+use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::engine::transactions::TransactionMetadata;
@@ -90,9 +92,9 @@ pub struct DbTransactionInstruction {
     pub id: Uuid,
     pub created_at: chrono::NaiveDateTime,
     pub transaction_signature: String,
-    pub accounts: Vec<i64>,
+    pub accounts: Vec<i16>,
     pub data: Vec<u8>,
-    pub program_id: Vec<u8>,
+    pub program_id: String,
     pub stack_height: i16,
     pub inner: bool,
 }
@@ -107,9 +109,9 @@ impl DbTransactionInstruction {
                 id: Uuid::new_v4(),
                 created_at: chrono::Utc::now().naive_utc(),
                 transaction_signature: meta.tx.signature().to_string(),
-                accounts: instruction.accounts.iter().map(|a| *a as i64).collect(),
+                accounts: instruction.accounts.iter().map(|a| *a as i16).collect(),
                 data: instruction.data.clone(),
-                program_id: program_id.to_bytes().to_vec(),
+                program_id: program_id.to_string(),
                 stack_height: 1,
                 inner: false,
             })
@@ -126,16 +128,13 @@ impl DbTransactionInstruction {
             .map(|a| {
                 let key = &keys[*a as usize];
                 solana_sdk::instruction::AccountMeta {
-                    pubkey: solana_sdk::pubkey::Pubkey::new_from_array(
-                        key.account.as_bytes().try_into().unwrap(),
-                    ),
+                    pubkey: Pubkey::from_str(&key.account).unwrap(),
                     is_signer: key.signer,
                     is_writable: key.writable,
                 }
             })
             .collect();
-        let program_id =
-            solana_sdk::pubkey::Pubkey::new_from_array(self.program_id.clone().try_into().unwrap());
+        let program_id = Pubkey::from_str(&self.program_id).expect("Failed to parse program id");
         let instruction = solana_sdk::instruction::Instruction {
             program_id,
             accounts,

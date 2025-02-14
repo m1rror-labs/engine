@@ -77,9 +77,9 @@ table! {
         id -> Uuid,
         created_at -> Timestamp,
         transaction_signature -> Text,
-        accounts -> Array<BigInt>,
+        accounts -> Array<SmallInt>,
         data -> Bytea,
-        program_id -> Bytea,
+        program_id -> Text,
         stack_height -> SmallInt,
         inner -> Bool,
     }

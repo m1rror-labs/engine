@@ -1,11 +1,18 @@
 use std::{env, sync::Arc};
 
 use actix_cors::Cors;
-use actix_web::{get, middleware, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{
+    get, middleware, post, rt, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
+};
+use actix_ws::AggregatedMessage;
 use dotenv::dotenv;
+use futures::StreamExt as _;
 use mockchain_engine::{
     engine::{SvmEngine, SVM},
-    rpc::rpc::{handle_request, RpcRequest},
+    rpc::{
+        rpc::{handle_request, RpcRequest},
+        ws::handle_ws_request,
+    },
     storage::{self, PgStorage},
 };
 
@@ -20,8 +27,7 @@ async fn rpc_reqest(
 ) -> impl Responder {
     let id = path.into_inner();
     let res = handle_request(id, req.clone(), &svm);
-    req.params.as_ref().map(|p| println!("{:?}", p));
-    println!("{}: {:?}", req.method, res);
+    println!("{:?}", req.method);
     HttpResponse::Ok().json(res)
 }
 
@@ -47,6 +53,48 @@ async fn get_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Resp
     }
 }
 
+async fn rpc_ws(
+    req: HttpRequest,
+    path: web::Path<Uuid>,
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    stream: web::Payload,
+) -> Result<HttpResponse, Error> {
+    let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
+    let mut stream = stream
+        .aggregate_continuations()
+        .max_continuation_size(2_usize.pow(20));
+    let id = path.into_inner();
+    rt::spawn(async move {
+        while let Some(msg) = stream.next().await {
+            match msg {
+                Ok(AggregatedMessage::Text(text)) => {
+                    println!("{:?}", text);
+                    let res = handle_ws_request(id, &text.to_string(), session.clone(), &svm).await;
+                    match res {
+                        Ok(_) => {}
+                        Err(e) => {
+                            session.text(e).await.unwrap();
+                        }
+                    }
+                }
+                Ok(AggregatedMessage::Binary(bin)) => {
+                    session.binary(bin).await.unwrap();
+                }
+                Ok(AggregatedMessage::Ping(msg)) => {
+                    session.pong(&msg).await.unwrap();
+                }
+                Ok(AggregatedMessage::Close(reason)) => {
+                    println!("Client disconnected: {:?}", reason);
+                    session.close(reason).await.unwrap();
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+    Ok(res)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
@@ -68,6 +116,7 @@ async fn main() -> std::io::Result<()> {
                     .allow_any_header()
                     .supports_credentials(),
             )
+            .route("/rpc/ws/{id}", web::get().to(rpc_ws))
             .service(rpc_reqest)
             .service(create_blockchain)
             .service(get_blockchains)

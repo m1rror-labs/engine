@@ -1,4 +1,6 @@
+use actix_web::rt::time;
 use blocks::{Block, Blockchain};
+use builtins::BUILTINS;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
@@ -7,7 +9,7 @@ use solana_log_collector::LogCollector;
 use solana_program::{last_restart_slot::LastRestartSlot, pubkey};
 use solana_program_runtime::{
     invoke_context::{EnvironmentConfig, InvokeContext},
-    loaded_programs::ProgramCacheForTxBatch,
+    loaded_programs::{ProgramCacheEntry, ProgramCacheForTxBatch},
     sysvar_cache::SysvarCache,
 };
 use solana_sdk::{
@@ -50,7 +52,7 @@ use solana_timings::ExecuteTimings;
 use spl::load_spl_programs;
 use spl_token::state::Account as SplAccount;
 use spl_token::state::Mint;
-use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr, sync::Arc}; // Add this import at the top of your file
+use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr, sync::Arc, time::Duration}; // Add this import at the top of your file
 use tokens::TokenAmount;
 use transactions::TransactionMetadata;
 use uuid::Uuid;
@@ -58,6 +60,7 @@ use uuid::Uuid;
 use crate::storage::{transactions::DbTransaction, Storage};
 
 pub mod blocks;
+pub mod builtins;
 pub mod spl;
 pub mod tokens;
 pub mod transactions;
@@ -116,6 +119,14 @@ pub trait SVM<T: Storage + Clone> {
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String>;
     fn add_program(&self, id: Uuid, program_id: Pubkey, program_bytes: &[u8])
         -> Result<(), String>;
+
+    #[allow(async_fn_in_trait)]
+    async fn signature_subscribe(
+        &self,
+        id: Uuid,
+        signature: &Signature,
+        commitment: TransactionConfirmationStatus,
+    ) -> Result<(), String>;
 }
 
 pub struct SvmEngine<T: Storage + Clone> {
@@ -137,6 +148,29 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         };
         engine.set_sysvars();
         engine
+    }
+
+    async fn signature_subscribe(
+        &self,
+        id: Uuid,
+        signature: &Signature,
+        commitment: TransactionConfirmationStatus,
+    ) -> Result<(), String> {
+        let mut interval = time::interval(Duration::from_secs(1));
+        loop {
+            interval.tick().await;
+            let tx = self.get_transaction(id, signature)?;
+            println!("Checking transaction: {:?}", tx);
+            if tx == None {
+                return Err("Transaction not found".to_string());
+            }
+            if let Some((_, status)) = tx {
+                if status.confirmation_status == Some(commitment.clone()) {
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String> {
@@ -180,18 +214,14 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             },
             None,
         )?;
-        self.storage.set_account(
-            id,
-            &pubkey!("11111111111111111111111111111111"),
-            Account {
-                lamports: 1,
-                data: vec![],
-                owner: pubkey!("NativeLoader1111111111111111111111111111111"),
-                executable: true,
-                rent_epoch: 1000000000,
-            },
-            None,
-        )?;
+        BUILTINS.iter().for_each(|builtint| {
+            let mut account: Account =
+                native_loader::create_loadable_account_for_test(builtint.name).into();
+            account.rent_epoch = 1000000;
+            self.storage
+                .set_account(id, &builtint.program_id, account, None)
+                .expect("Failed to set builtin account");
+        });
         load_spl_programs(self, id)?;
 
         Ok(id)
@@ -264,9 +294,9 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
     fn latest_blockhash(&self, id: Uuid) -> Result<Block, String> {
         let block = self.storage.get_latest_block(id)?;
 
-        if self.is_blockhash_valid(id, &block.blockhash)? {
-            return Ok(block);
-        }
+        // if self.is_blockhash_valid(id, &block.blockhash)? {
+        //     return Ok(block);
+        // }
 
         let mut hasher = Sha256::new();
         hasher.update(block.blockhash.as_ref());
@@ -387,7 +417,10 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             TransactionStatus {
                 slot,
                 confirmations: None,
-                err: tx_res.map(|_| TransactionError::InsufficientFundsForFee), //TODO: This is wrong
+                err: tx_res.map(|e| {
+                    println!("tx error: {:?}", e);
+                    TransactionError::InsufficientFundsForFee
+                }), //TODO: This is wrong
                 confirmation_status: Some(tx_confirmation_status(created_at.and_utc())),
             },
         )))
@@ -423,6 +456,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let addresses = account_keys.iter().collect();
         //TODO: I think this works, but maybe not
         let accounts_vec = self.storage.get_accounts(id, &addresses)?;
+        println!("accounts_vec: {:?}", accounts_vec);
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -676,11 +710,17 @@ impl<T: Storage + Clone> SvmEngine<T> {
             if tx.message().is_writable(index) {
                 let account = context
                     .get_account_at_index(index as IndexOfAccount)
-                    .map_err(|err| TransactionError::InstructionError(index as u8, err))?
+                    .map_err(|err| {
+                        println!("Error getting account at index: {:?}", err);
+                        TransactionError::InstructionError(index as u8, err)
+                    })?
                     .borrow();
                 let pubkey = context
                     .get_key_of_account_at_index(index as IndexOfAccount)
-                    .map_err(|err| TransactionError::InstructionError(index as u8, err))?;
+                    .map_err(|err| {
+                        println!("Error getting key of account at index: {:?}", err);
+                        TransactionError::InstructionError(index as u8, err)
+                    })?;
                 let rent = self.sysvar_cache.get_rent().unwrap_or_default();
 
                 if !account.data().is_empty() {
@@ -717,6 +757,11 @@ impl<T: Storage + Clone> SvmEngine<T> {
         let blockhash = tx.message().recent_blockhash();
         //TODO: I dont think I need to do anything here, but if something goes wrong, look here
         let mut program_cache_for_tx_batch = ProgramCacheForTxBatch::default();
+        BUILTINS.iter().for_each(|builtint| {
+            let loaded_program =
+                ProgramCacheEntry::new_builtin(0, builtint.name.len(), builtint.entrypoint);
+            program_cache_for_tx_batch.replenish(builtint.program_id, Arc::new(loaded_program));
+        });
         let mut accumulated_consume_units = 0;
         let message = tx.message();
         let account_keys = message.account_keys();
@@ -821,6 +866,7 @@ impl<T: Storage + Clone> SvmEngine<T> {
         match maybe_program_indices {
             Ok(program_indices) => {
                 let mut context = self.create_transaction_context(compute_budget, accounts);
+                println!("Processing transaction 5:",);
                 let mut tx_result = MessageProcessor::process_message(
                     tx.message(),
                     &program_indices,
@@ -842,7 +888,7 @@ impl<T: Storage + Clone> SvmEngine<T> {
                     &mut accumulated_consume_units,
                 )
                 .map(|_| ());
-
+                println!("Transaction result: {:?}", tx_result);
                 if let Err(err) = self.check_accounts_rent(tx, &context, accounts_db) {
                     tx_result = Err(err);
                 };
@@ -1192,9 +1238,9 @@ impl<T: Storage + Clone> Loader<T> {
 fn tx_confirmation_status(time: chrono::DateTime<Utc>) -> TransactionConfirmationStatus {
     let now = Utc::now();
     let duration = now - time;
-    if duration.num_seconds() < 60 {
+    if duration.num_seconds() > 1 {
         TransactionConfirmationStatus::Finalized
-    } else if duration.num_seconds() < 120 {
+    } else if duration.num_seconds() > 2 {
         TransactionConfirmationStatus::Confirmed
     } else {
         TransactionConfirmationStatus::Processed
