@@ -22,8 +22,6 @@ pub fn send_transaction<T: Storage + Clone>(
         Some(s) => match parse_tx(s.clone()) {
             Ok(tx) => tx,
             Err(_) => {
-                println!("{:?}", req);
-                println!("{:?}", s);
                 return Err(serde_json::json!({
                     "code": -32602,
                     "message": "Invalid params: unable to parse tx"
@@ -40,9 +38,9 @@ pub fn send_transaction<T: Storage + Clone>(
 
     match svm.send_transaction(id, tx) {
         Ok(res) => Ok(serde_json::json!(res)),
-        Err(e) => Err(serde_json::json!({
+        Err(_) => Err(serde_json::json!({
             "code": -32602,
-            "message": e,
+            "message": "Failed to send tx",
         })),
     }
 }
