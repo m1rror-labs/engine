@@ -4,12 +4,13 @@ use builtins::BUILTINS;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
+use solana_bpf_loader_program::syscalls::create_program_runtime_environment_v1;
 use solana_compute_budget::compute_budget::ComputeBudget;
 use solana_log_collector::LogCollector;
 use solana_program::{last_restart_slot::LastRestartSlot, pubkey};
 use solana_program_runtime::{
     invoke_context::{EnvironmentConfig, InvokeContext},
-    loaded_programs::{ProgramCacheEntry, ProgramCacheForTxBatch},
+    loaded_programs::{LoadProgramMetrics, ProgramCacheEntry, ProgramCacheForTxBatch},
     sysvar_cache::SysvarCache,
 };
 use solana_sdk::{
@@ -71,59 +72,76 @@ pub trait SVM<T: Storage + Clone> {
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String>;
     fn get_blockchains(&self) -> Result<Vec<Blockchain>, String>;
 
-    fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
+    fn get_account(&self, blockchain_id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
     fn get_transactions_for_address(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         pubkey: &Pubkey,
         limit: Option<usize>,
     ) -> Result<Vec<DbTransaction>, String>;
-    fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
-    fn get_block(&self, id: Uuid, slot_number: &u64) -> Result<Option<Block>, String>;
-    fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
+    fn get_balance(&self, blockchain_id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
+    fn get_block(&self, blockchain_id: Uuid, slot_number: &u64) -> Result<Option<Block>, String>;
+    fn get_latest_block(&self, blockchain_id: Uuid) -> Result<Block, String>;
     fn get_fee_for_message(&self, message: &SanitizedMessage) -> u64;
-    fn get_genesis_hash(&self, id: Uuid) -> Result<Hash, String>;
-    fn get_identity(&self, id: Uuid) -> Result<Pubkey, String>;
+    fn get_genesis_hash(&self, blockchain_id: Uuid) -> Result<Hash, String>;
+    fn get_identity(&self, blockchain_id: Uuid) -> Result<Pubkey, String>;
     fn get_multiple_accounts(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         pubkeys: &Vec<&Pubkey>,
     ) -> Result<Vec<Option<Account>>, String>;
-    fn latest_blockhash(&self, id: Uuid) -> Result<Block, String>;
-    fn current_block(&self, id: Uuid) -> Result<Block, String>;
+    fn latest_blockhash(&self, blockchain_id: Uuid) -> Result<Block, String>;
+    fn current_block(&self, blockchain_id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
-    fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
+    fn is_blockhash_valid(&self, blockchain_id: Uuid, blockhash: &Hash) -> Result<bool, String>;
     fn get_token_accounts_by_owner(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         pubkey: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
-    fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String>;
+    fn get_token_supply(
+        &self,
+        blockchain_id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Option<TokenAmount>, String>;
     fn get_token_account_balance(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         pubkey: &Pubkey,
     ) -> Result<Option<TokenAmount>, String>;
     fn get_transaction(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         signature: &Signature,
     ) -> Result<Option<(Transaction, TransactionStatus)>, String>;
-    fn get_transaction_count(&self, id: Uuid) -> Result<u64, String>;
-    fn send_transaction(&self, id: Uuid, tx: VersionedTransaction) -> Result<String, String>;
+    fn get_transaction_count(&self, blockchain_id: Uuid) -> Result<u64, String>;
+    fn send_transaction(
+        &self,
+        blockchain_id: Uuid,
+        tx: VersionedTransaction,
+    ) -> Result<String, String>;
     fn simulate_transaction(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         tx: VersionedTransaction,
     ) -> Result<TransactionMetadata, String>;
-    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String>;
-    fn add_program(&self, id: Uuid, program_id: Pubkey, program_bytes: &[u8])
-        -> Result<(), String>;
+    fn airdrop(
+        &self,
+        blockchain_id: Uuid,
+        pubkey: &Pubkey,
+        lamports: u64,
+    ) -> Result<String, String>;
+    fn add_program(
+        &self,
+        blockchain_id: Uuid,
+        program_id: Pubkey,
+        program_bytes: &[u8],
+    ) -> Result<(), String>;
 
     #[allow(async_fn_in_trait)]
     async fn signature_subscribe(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         signature: &Signature,
         commitment: TransactionConfirmationStatus,
     ) -> Result<u64, String>;
@@ -146,20 +164,26 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             sysvar_cache: SysvarCache::default(),
             storage,
         };
+        BUILTINS.iter().for_each(|builtint| {
+            if let Some(feature_id) = builtint.feature_id {
+                engine.feature_set.activate(&feature_id, 0);
+            }
+        });
+
         engine.set_sysvars();
         engine
     }
 
     async fn signature_subscribe(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         signature: &Signature,
         commitment: TransactionConfirmationStatus,
     ) -> Result<u64, String> {
         let mut interval = time::interval(Duration::from_millis(400));
         loop {
             interval.tick().await;
-            let tx = self.get_transaction(id, signature)?;
+            let tx = self.get_transaction(blockchain_id, signature)?;
             println!("Checking transaction:");
             if tx == None {
                 return Err("Transaction not found".to_string());
@@ -185,14 +209,14 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             airdrop_keypair: keypair.insecure_clone(),
         };
 
-        let id = self.storage.set_blockchain(&blockchain)?;
+        let blockchain_id = self.storage.set_blockchain(&blockchain)?;
 
         let mut hasher = Sha256::new();
-        hasher.update(id.as_bytes());
+        hasher.update(blockchain_id.as_bytes());
         let hash_array = hasher.finalize();
         let hash = Hash::new_from_array(hash_array.into());
         self.storage.set_block(
-            id,
+            blockchain_id,
             &Block {
                 blockhash: hash,
                 block_time: 0,
@@ -203,7 +227,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             },
         )?;
         self.storage.set_account(
-            id,
+            blockchain_id,
             &keypair.pubkey(),
             Account {
                 lamports: 1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL),
@@ -219,44 +243,46 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
                 native_loader::create_loadable_account_for_test(builtint.name).into();
             account.rent_epoch = 1000000;
             self.storage
-                .set_account(id, &builtint.program_id, account, None)
+                .set_account(blockchain_id, &builtint.program_id, account, None)
                 .expect("Failed to set builtin account");
         });
-        load_spl_programs(self, id)?;
+        load_spl_programs(self, blockchain_id)?;
 
-        Ok(id)
+        Ok(blockchain_id)
     }
 
     fn get_blockchains(&self) -> Result<Vec<Blockchain>, String> {
         self.storage.get_blockchains()
     }
 
-    fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String> {
-        self.storage.get_account(id, pubkey)
+    fn get_account(&self, blockchain_id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String> {
+        self.storage.get_account(blockchain_id, pubkey)
     }
 
     fn get_transactions_for_address(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         pubkey: &Pubkey,
         limit: Option<usize>,
     ) -> Result<Vec<DbTransaction>, String> {
-        self.storage.get_transactions_for_address(id, pubkey, limit)
+        self.storage
+            .get_transactions_for_address(blockchain_id, pubkey, limit)
     }
 
-    fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String> {
-        match self.get_account(id, pubkey)? {
+    fn get_balance(&self, blockchain_id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String> {
+        match self.get_account(blockchain_id, pubkey)? {
             Some(account) => Ok(Some(account.lamports)),
             None => Ok(None),
         }
     }
 
-    fn get_block(&self, id: Uuid, slot_number: &u64) -> Result<Option<Block>, String> {
-        self.storage.get_block_by_height(id, slot_number.to_owned())
+    fn get_block(&self, blockchain_id: Uuid, slot_number: &u64) -> Result<Option<Block>, String> {
+        self.storage
+            .get_block_by_height(blockchain_id, slot_number.to_owned())
     }
 
-    fn get_latest_block(&self, id: Uuid) -> Result<Block, String> {
-        self.storage.get_latest_block(id)
+    fn get_latest_block(&self, blockchain_id: Uuid) -> Result<Block, String> {
+        self.storage.get_latest_block(blockchain_id)
     }
 
     fn get_fee_for_message(&self, message: &SanitizedMessage) -> u64 {
@@ -270,31 +296,31 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         )
     }
 
-    fn get_genesis_hash(&self, id: Uuid) -> Result<Hash, String> {
-        let block = self.get_block(id, &0)?;
+    fn get_genesis_hash(&self, blockchain_id: Uuid) -> Result<Hash, String> {
+        let block = self.get_block(blockchain_id, &0)?;
         match block {
             Some(block) => Ok(block.blockhash),
             None => Err("Genesis block not found".to_string()),
         }
     }
 
-    fn get_identity(&self, id: Uuid) -> Result<Pubkey, String> {
-        let blockchain = self.storage.get_blockchain(id)?;
+    fn get_identity(&self, blockchain_id: Uuid) -> Result<Pubkey, String> {
+        let blockchain = self.storage.get_blockchain(blockchain_id)?;
         Ok(blockchain.airdrop_keypair.pubkey())
     }
 
     fn get_multiple_accounts(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         pubkeys: &Vec<&Pubkey>,
     ) -> Result<Vec<Option<Account>>, String> {
-        self.storage.get_accounts(id, pubkeys)
+        self.storage.get_accounts(blockchain_id, pubkeys)
     }
 
-    fn latest_blockhash(&self, id: Uuid) -> Result<Block, String> {
-        let block = self.storage.get_latest_block(id)?;
+    fn latest_blockhash(&self, blockchain_id: Uuid) -> Result<Block, String> {
+        let block = self.storage.get_latest_block(blockchain_id)?;
 
-        // if self.is_blockhash_valid(id, &block.blockhash)? {
+        // if self.is_blockhash_valid(blockchain_id, &block.blockhash)? {
         //     return Ok(block);
         // }
 
@@ -311,13 +337,13 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             transactions: vec![],
         };
 
-        self.storage.set_block(id, &next_block)?;
+        self.storage.set_block(blockchain_id, &next_block)?;
 
         Ok(next_block)
     }
 
-    fn current_block(&self, id: Uuid) -> Result<Block, String> {
-        let block = self.storage.get_latest_block(id)?;
+    fn current_block(&self, blockchain_id: Uuid) -> Result<Block, String> {
+        let block = self.storage.get_latest_block(blockchain_id)?;
         Ok(block)
     }
 
@@ -325,8 +351,8 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         self.rent.minimum_balance(data_len)
     }
 
-    fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String> {
-        let block = self.storage.get_block(id, blockhash)?;
+    fn is_blockhash_valid(&self, blockchain_id: Uuid, blockhash: &Hash) -> Result<bool, String> {
+        let block = self.storage.get_block(blockchain_id, blockhash)?;
         let block_time = match DateTime::from_timestamp(block.block_time as i64, 0) {
             Some(t) => t,
             None => return Err("Invalid block time".to_string()),
@@ -339,17 +365,17 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
 
     fn get_token_account_balance(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         pubkey: &Pubkey,
     ) -> Result<Option<TokenAmount>, String> {
-        let account = self.get_account(id, pubkey)?;
+        let account = self.get_account(blockchain_id, pubkey)?;
         if let None = account {
             return Ok(None);
         }
         let account = account.unwrap();
         let spl =
             SplAccount::unpack_from_slice(account.data.as_slice()).map_err(|e| e.to_string())?;
-        let mint = self.get_account(id, &spl.mint)?;
+        let mint = self.get_account(blockchain_id, &spl.mint)?;
         if let None = mint {
             return Ok(None);
         }
@@ -365,24 +391,28 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
 
     fn get_token_accounts_by_owner(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         pubkey: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String> {
         let token_program = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
         let token_2022 = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-        let token_accounts = self
-            .storage
-            .get_token_accounts_by_owner(id, pubkey, &token_program);
-        let token_2022_accounts = self
-            .storage
-            .get_token_accounts_by_owner(id, pubkey, &token_2022);
+        let token_accounts =
+            self.storage
+                .get_token_accounts_by_owner(blockchain_id, pubkey, &token_program);
+        let token_2022_accounts =
+            self.storage
+                .get_token_accounts_by_owner(blockchain_id, pubkey, &token_2022);
         let mut accounts = token_accounts?;
         accounts.extend(token_2022_accounts?);
         Ok(accounts)
     }
 
-    fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String> {
-        let account = self.get_account(id, pubkey)?;
+    fn get_token_supply(
+        &self,
+        blockchain_id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Option<TokenAmount>, String> {
+        let account = self.get_account(blockchain_id, pubkey)?;
         if let None = account {
             return Ok(None);
         }
@@ -404,10 +434,10 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
 
     fn get_transaction(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         signature: &Signature,
     ) -> Result<Option<(Transaction, TransactionStatus)>, String> {
-        let res = self.storage.get_transaction(id, signature)?;
+        let res = self.storage.get_transaction(blockchain_id, signature)?;
         if res == None {
             return Ok(None);
         }
@@ -426,12 +456,20 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         )))
     }
 
-    fn get_transaction_count(&self, id: Uuid) -> Result<u64, String> {
-        self.storage.get_transaction_count(id)
+    fn get_transaction_count(&self, blockchain_id: Uuid) -> Result<u64, String> {
+        self.storage.get_transaction_count(blockchain_id)
     }
 
-    fn send_transaction(&self, id: Uuid, raw_tx: VersionedTransaction) -> Result<String, String> {
-        let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
+    fn send_transaction(
+        &self,
+        blockchain_id: Uuid,
+        raw_tx: VersionedTransaction,
+    ) -> Result<String, String> {
+        let address_loader = Loader::new(
+            self.storage.clone(),
+            blockchain_id,
+            self.sysvar_cache.clone(),
+        );
 
         let tx = match SanitizedTransaction::try_create(
             raw_tx,
@@ -444,10 +482,14 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             Err(e) => return Err(e.to_string()),
         };
 
-        if !self.is_blockhash_valid(id, tx.message().recent_blockhash())? {
+        if !self.is_blockhash_valid(blockchain_id, tx.message().recent_blockhash())? {
             return Err("Blockhash is not valid".to_string());
         };
-        if self.storage.get_transaction(id, tx.signature())?.is_some() {
+        if self
+            .storage
+            .get_transaction(blockchain_id, tx.signature())?
+            .is_some()
+        {
             return Err("Transaction cannot be replayed".to_string());
         };
 
@@ -455,8 +497,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let account_keys = message.account_keys();
         let addresses = account_keys.iter().collect();
         //TODO: I think this works, but maybe not
-        let accounts_vec = self.storage.get_accounts(id, &addresses)?;
-        println!("accounts_vec: {:?}", accounts_vec);
+        let accounts_vec = self.storage.get_accounts(blockchain_id, &addresses)?;
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -478,8 +519,11 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             let payer_key = payer_key.unwrap();
             let payer_account = accounts_db.get_account(&payer_key).unwrap();
             payer_account.to_owned().checked_sub_lamports(fee).unwrap();
-            self.storage
-                .set_account_lamports(id, &payer_key, payer_account.lamports())?;
+            self.storage.set_account_lamports(
+                blockchain_id,
+                &payer_key,
+                payer_account.lamports(),
+            )?;
         }
         let context = context.unwrap();
         let (signature, return_data, inner_instructions, post_accounts) =
@@ -488,7 +532,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             unreachable!("Log collector should not be used after send_transaction returns")
         };
 
-        let current_block = self.current_block(id)?;
+        let current_block = self.current_block(blockchain_id)?;
         let meta = TransactionMetadata {
             signature,
             err: tx_result.err(),
@@ -515,27 +559,31 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
                 .collect(),
             post_accounts: post_accounts.clone(),
         };
-        self.storage.save_transaction(id, &meta)?;
+        self.storage.save_transaction(blockchain_id, &meta)?;
 
         self.storage.set_accounts(
-            id,
+            blockchain_id,
             post_accounts
                 .into_iter()
                 .map(|(pubkey, account_shared_data)| (pubkey, Account::from(account_shared_data)))
                 .collect(),
         )?;
 
-        self.progress_block(id)?;
+        self.progress_block(blockchain_id)?;
 
         Ok(tx.signature().to_string())
     }
 
     fn simulate_transaction(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         raw_tx: VersionedTransaction,
     ) -> Result<TransactionMetadata, String> {
-        let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
+        let address_loader = Loader::new(
+            self.storage.clone(),
+            blockchain_id,
+            self.sysvar_cache.clone(),
+        );
 
         let tx = match SanitizedTransaction::try_create(
             raw_tx,
@@ -548,10 +596,14 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             Err(e) => return Err(e.to_string()),
         };
 
-        if !self.is_blockhash_valid(id, tx.message().recent_blockhash())? {
+        if !self.is_blockhash_valid(blockchain_id, tx.message().recent_blockhash())? {
             return Err("Blockhash is not valid".to_string());
         };
-        if self.storage.get_transaction(id, tx.signature())?.is_some() {
+        if self
+            .storage
+            .get_transaction(blockchain_id, tx.signature())?
+            .is_some()
+        {
             return Err("Transaction cannot be replayed".to_string());
         };
 
@@ -559,7 +611,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let account_keys = message.account_keys();
         let addresses = account_keys.iter().collect();
         //TODO: I think this works, but maybe not
-        let accounts_vec = self.storage.get_accounts(id, &addresses)?;
+        let accounts_vec = self.storage.get_accounts(blockchain_id, &addresses)?;
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -581,8 +633,11 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             let payer_key = payer_key.unwrap();
             let payer_account = accounts_db.get_account(&payer_key).unwrap();
             payer_account.to_owned().checked_sub_lamports(fee).unwrap();
-            self.storage
-                .set_account_lamports(id, &payer_key, payer_account.lamports())?;
+            self.storage.set_account_lamports(
+                blockchain_id,
+                &payer_key,
+                payer_account.lamports(),
+            )?;
         }
 
         let context = context.unwrap();
@@ -592,7 +647,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             unreachable!("Log collector should not be used after send_transaction returns")
         };
 
-        let current_block = self.current_block(id)?;
+        let current_block = self.current_block(blockchain_id)?;
         let meta = TransactionMetadata {
             signature,
             err: tx_result.err(),
@@ -623,10 +678,15 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         Ok(meta)
     }
 
-    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
-        let blockchain = self.storage.get_blockchain(id)?;
+    fn airdrop(
+        &self,
+        blockchain_id: Uuid,
+        pubkey: &Pubkey,
+        lamports: u64,
+    ) -> Result<String, String> {
+        let blockchain = self.storage.get_blockchain(blockchain_id)?;
         let payer = blockchain.airdrop_keypair;
-        let latest_blockhash = self.latest_blockhash(id)?;
+        let latest_blockhash = self.latest_blockhash(blockchain_id)?;
         let latest_blockhash = latest_blockhash.blockhash.to_string();
         let tx = VersionedTransaction::try_new(
             VersionedMessage::Legacy(Message::new_with_blockhash(
@@ -642,12 +702,12 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         )
         .unwrap();
 
-        self.send_transaction(id, tx)
+        self.send_transaction(blockchain_id, tx)
     }
 
     fn add_program(
         &self,
-        id: Uuid,
+        blockchain_id: Uuid,
         program_id: Pubkey,
         program_bytes: &[u8],
     ) -> Result<(), String> {
@@ -660,7 +720,8 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             executable: true,
             rent_epoch: 0,
         };
-        self.storage.set_account(id, &program_id, account, None)?;
+        self.storage
+            .set_account(blockchain_id, &program_id, account, None)?;
         Ok(())
     }
 }
@@ -839,12 +900,33 @@ impl<T: Storage + Clone> SvmEngine<T> {
                 if !program_account.executable() {
                     return Err(TransactionError::InvalidProgramForExecution);
                 }
-                account_indices.insert(0, program_index as IndexOfAccount);
 
                 let owner_id = program_account.owner();
                 if native_loader::check_id(owner_id) {
                     return Ok(account_indices);
                 }
+                let program_runtime_v1 = create_program_runtime_environment_v1(
+                    &self.feature_set,
+                    &ComputeBudget::default(),
+                    false,
+                    true,
+                )
+                .unwrap();
+                let loaded_program = solana_bpf_loader_program::load_program_from_bytes(
+                    None,
+                    &mut LoadProgramMetrics::default(),
+                    program_account.data(),
+                    program_account.owner(),
+                    program_account.data().len(),
+                    0,
+                    Arc::new(program_runtime_v1),
+                    false,
+                )
+                .unwrap_or_default();
+                println!("Loaded program: {:?}", program_id);
+                program_cache_for_tx_batch
+                    .replenish(program_id.to_owned(), Arc::new(loaded_program));
+                account_indices.insert(0, program_index as IndexOfAccount);
                 if !accounts
                     .get(builtins_start_index..)
                     .ok_or(TransactionError::ProgramAccountNotFound)?
@@ -866,7 +948,6 @@ impl<T: Storage + Clone> SvmEngine<T> {
         match maybe_program_indices {
             Ok(program_indices) => {
                 let mut context = self.create_transaction_context(compute_budget, accounts);
-                println!("Processing transaction 5:",);
                 let mut tx_result = MessageProcessor::process_message(
                     tx.message(),
                     &program_indices,
@@ -905,8 +986,8 @@ impl<T: Storage + Clone> SvmEngine<T> {
         }
     }
 
-    pub fn progress_block(&self, id: Uuid) -> Result<(), String> {
-        let latest_block = self.storage.get_latest_block(id)?;
+    pub fn progress_block(&self, blockchain_id: Uuid) -> Result<(), String> {
+        let latest_block = self.storage.get_latest_block(blockchain_id)?;
 
         let mut hasher = Sha256::new();
         hasher.update(latest_block.blockhash.as_ref());
@@ -921,7 +1002,7 @@ impl<T: Storage + Clone> SvmEngine<T> {
             transactions: vec![],
         };
 
-        self.storage.set_block(id, &next_block)?;
+        self.storage.set_block(blockchain_id, &next_block)?;
         Ok(())
     }
 }
@@ -1171,7 +1252,7 @@ pub fn inner_instructions_list_from_instruction_trace(
 #[derive(Clone)]
 struct Loader<T: Storage + Clone> {
     storage: T,
-    id: Uuid,
+    blockchain_id: Uuid,
     sysvar_cache: SysvarCache,
 }
 
@@ -1193,10 +1274,10 @@ impl<T: Storage + Clone> AddressLoader for Loader<T> {
 }
 
 impl<T: Storage + Clone> Loader<T> {
-    fn new(storage: T, id: Uuid, sysvar_cache: SysvarCache) -> Self {
+    fn new(storage: T, blockchain_id: Uuid, sysvar_cache: SysvarCache) -> Self {
         Loader {
             storage,
-            id,
+            blockchain_id: blockchain_id,
             sysvar_cache,
         }
     }
@@ -1207,7 +1288,7 @@ impl<T: Storage + Clone> Loader<T> {
     ) -> std::result::Result<LoadedAddresses, AddressLookupError> {
         let table_account = self
             .storage
-            .get_account(self.id, &address_table_lookup.account_key)
+            .get_account(self.blockchain_id, &address_table_lookup.account_key)
             .map_err(|_| AddressLookupError::LookupTableAccountNotFound)?
             .ok_or(AddressLookupError::LookupTableAccountNotFound)?;
 

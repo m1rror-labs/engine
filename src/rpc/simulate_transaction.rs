@@ -23,7 +23,8 @@ pub fn simulate_transaction<T: Storage + Clone>(
     {
         Some(s) => match parse_tx(s.clone()) {
             Ok(tx) => tx,
-            Err(_) => {
+            Err(e) => {
+                println!("{:?}", req);
                 return Err(serde_json::json!({
                     "code": -32602,
                     "message": "Invalid params: unable to parse tx"

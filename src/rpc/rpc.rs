@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
@@ -387,7 +388,18 @@ pub fn parse_hash(hash_str: &str) -> Result<Hash, Value> {
 }
 
 pub fn parse_tx(tx_str: Value) -> Result<VersionedTransaction, Value> {
-    match VersionedTransaction::deserialize(tx_str) {
+    let tx_data = BASE64_STANDARD.decode(tx_str.as_str().unwrap().as_bytes());
+    let tx_data = match tx_data {
+        Ok(tx_data) => tx_data,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": "Invalid params: unable to parse tx",
+            }));
+        }
+    };
+
+    match bincode::deserialize(&tx_data) {
         Ok(pk) => Ok(pk),
         Err(_) => Err(serde_json::json!({
             "code": -32602,
