@@ -59,9 +59,9 @@ pub fn simulate_transaction<T: Storage + Clone>(
                   }
             }))
         }
-        Err(_) => Err(serde_json::json!({
+        Err(e) => Err(serde_json::json!({
             "code": -32602,
-            "message": "Failed to send tx",
+            "message": e,
         })),
     }
 }

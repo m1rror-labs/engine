@@ -38,9 +38,9 @@ pub fn send_transaction<T: Storage + Clone>(
 
     match svm.send_transaction(id, tx) {
         Ok(res) => Ok(serde_json::json!(res)),
-        Err(_) => Err(serde_json::json!({
+        Err(e) => Err(serde_json::json!({
             "code": -32602,
-            "message": "Failed to send tx",
+            "message": e,
         })),
     }
 }
