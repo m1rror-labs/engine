@@ -126,7 +126,7 @@ pub trait SVM<T: Storage + Clone> {
         id: Uuid,
         signature: &Signature,
         commitment: TransactionConfirmationStatus,
-    ) -> Result<(), String>;
+    ) -> Result<u64, String>;
 }
 
 pub struct SvmEngine<T: Storage + Clone> {
@@ -155,22 +155,22 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         id: Uuid,
         signature: &Signature,
         commitment: TransactionConfirmationStatus,
-    ) -> Result<(), String> {
-        let mut interval = time::interval(Duration::from_secs(1));
+    ) -> Result<u64, String> {
+        let mut interval = time::interval(Duration::from_millis(400));
         loop {
             interval.tick().await;
             let tx = self.get_transaction(id, signature)?;
-            println!("Checking transaction: {:?}", tx);
+            println!("Checking transaction:");
             if tx == None {
                 return Err("Transaction not found".to_string());
             }
             if let Some((_, status)) = tx {
+                println!("Transaction status: {:?}", status);
                 if status.confirmation_status == Some(commitment.clone()) {
-                    break;
+                    return Ok(status.slot);
                 }
             }
         }
-        Ok(())
     }
 
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String> {
@@ -1238,10 +1238,10 @@ impl<T: Storage + Clone> Loader<T> {
 fn tx_confirmation_status(time: chrono::DateTime<Utc>) -> TransactionConfirmationStatus {
     let now = Utc::now();
     let duration = now - time;
-    if duration.num_seconds() > 1 {
-        TransactionConfirmationStatus::Finalized
-    } else if duration.num_seconds() > 2 {
+    if duration.num_seconds() > 1 && duration.num_seconds() <= 2 {
         TransactionConfirmationStatus::Confirmed
+    } else if duration.num_seconds() > 3 {
+        TransactionConfirmationStatus::Finalized
     } else {
         TransactionConfirmationStatus::Processed
     }

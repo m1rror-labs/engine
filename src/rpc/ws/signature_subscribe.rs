@@ -52,7 +52,7 @@ pub async fn signature_subscribe<T: Storage + Clone>(
         .text(
             serde_json::json!({
               "jsonrpc": "2.0",
-              "id": 123,
+              "id": req.id,
               "result": sub_id
             })
             .to_string(),
@@ -62,8 +62,8 @@ pub async fn signature_subscribe<T: Storage + Clone>(
 
     let signature = parse_signature(sig_str).map_err(|e| e.to_string())?;
     match svm.signature_subscribe(id, &signature, confirmation).await {
-        Ok(_) => {
-            println!("Signature subscribed: {:?}", signature);
+        Ok(slot) => {
+            println!("Signature subscribed: {:?}", slot);
             session
                 .text(
                     serde_json::json!({
@@ -72,7 +72,7 @@ pub async fn signature_subscribe<T: Storage + Clone>(
                       "params": {
                         "result": {
                           "context": {
-                            "slot": 5207624
+                            "slot": slot+3
                           },
                           "value": {
                             "err": null

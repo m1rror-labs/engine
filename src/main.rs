@@ -28,6 +28,7 @@ async fn rpc_reqest(
     let id = path.into_inner();
     let res = handle_request(id, req.clone(), &svm);
     println!("{:?}", req.method);
+    println!("{:?}", res);
     HttpResponse::Ok().json(res)
 }
 
@@ -105,6 +106,28 @@ async fn main() -> std::io::Result<()> {
     let storage = storage::PgStorage::new(&database_url);
     let svm = Arc::new(SvmEngine::new(storage.clone()));
 
+    // Spawn new thread
+    rt::spawn(async move {
+        let storage = storage::PgStorage::new(&database_url);
+        let svm = Arc::new(SvmEngine::new(storage.clone()));
+        HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(svm.clone())) // Share dependencies
+                .wrap(middleware::Logger::default())
+                .wrap(
+                    Cors::default()
+                        .allow_any_origin()
+                        .allow_any_method()
+                        .allow_any_header()
+                        .supports_credentials(),
+                )
+                .route("/rpc/{id}", web::get().to(rpc_ws))
+        })
+        .bind(("0.0.0.0", 8081))?
+        .run()
+        .await
+    });
+
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(svm.clone())) // Share dependencies
@@ -116,7 +139,6 @@ async fn main() -> std::io::Result<()> {
                     .allow_any_header()
                     .supports_credentials(),
             )
-            .route("/rpc/ws/{id}", web::get().to(rpc_ws))
             .service(rpc_reqest)
             .service(create_blockchain)
             .service(get_blockchains)

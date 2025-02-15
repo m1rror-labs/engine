@@ -1,4 +1,5 @@
 use serde_json::Value;
+use solana_banks_interface::TransactionConfirmationStatus;
 use uuid::Uuid;
 
 use crate::{
@@ -13,10 +14,13 @@ pub fn get_signature_statuses<T: Storage + Clone>(
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
+    println!("get_signature_statuses");
+    println!("{:?}", req);
     let sig_str = match req
         .params
         .as_ref()
         .and_then(|params| params.get(0))
+        .and_then(|arr| arr.get(0)) //TODO: This needs to handle multiple signatures
         .and_then(|v| v.as_str())
     {
         Some(s) => s,
@@ -47,15 +51,22 @@ pub fn get_signature_statuses<T: Storage + Clone>(
                     }
                 };
                 Ok(serde_json::json!({
-                    "context": { "slot": 341197053 },
+                    "context": { "slot": status.slot },
                     "value": [
-                        {
-                          "slot": status.slot,
-                          "confirmations": null,
-                          "err": status.err,
-                          "status": status_value,
-                          "confirmationStatus": status.confirmation_status,
-                        },
+                        // {
+                        //   "slot": status.slot,
+                        //   "confirmations": null,
+                        //   "err": status.err,
+                        //   "status": status_value,
+                        //   "confirmationStatus": match status.confirmation_status {
+                        //       Some(status) => match status {
+                        //           TransactionConfirmationStatus::Finalized => "finalized",
+                        //           TransactionConfirmationStatus::Confirmed => "confirmed",
+                        //           TransactionConfirmationStatus::Processed => "processed",
+                        //       },
+                        //       None => "processed",
+                        //   }
+                        // },
                         null
                       ]
                 }))

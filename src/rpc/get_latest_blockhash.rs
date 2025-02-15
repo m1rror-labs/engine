@@ -13,11 +13,11 @@ pub fn get_latest_blockhash<T: Storage + Clone>(
     match svm.latest_blockhash(id) {
         Ok(blockhash) => Ok(serde_json::json!({
             "context": {
-                "slot": 2792
+                "slot": blockhash.block_height
               },
               "value": {
                 "blockhash": blockhash.blockhash.to_string(),
-                "lastValidBlockHeight": blockhash.block_height+100
+                "lastValidBlockHeight": blockhash.block_height+10
               }
         })),
         Err(e) => Err(serde_json::json!({
