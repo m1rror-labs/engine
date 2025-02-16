@@ -44,8 +44,7 @@ use solana_sdk::{
     system_instruction, system_program,
     sysvar::{self, instructions::construct_instructions_data, Sysvar, SysvarId},
     transaction::{
-        self, MessageHash, SanitizedTransaction, Transaction, TransactionError,
-        VersionedTransaction,
+        MessageHash, SanitizedTransaction, Transaction, TransactionError, VersionedTransaction,
     },
     transaction_context::{ExecutionRecord, IndexOfAccount, TransactionContext},
 };
@@ -631,6 +630,7 @@ impl<T: Storage + Clone + 'static> SvmEngine<T> {
         self.set_sysvar(&Rent::default());
         self.set_sysvar(&SlotHistory::default());
         self.set_sysvar(&StakeHistory::default());
+        self.transaction_processor.set_sysvars();
     }
 
     fn create_transaction_context(

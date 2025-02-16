@@ -2,6 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use solana_compute_budget::compute_budget::ComputeBudget;
 use solana_log_collector::LogCollector;
+use solana_program::last_restart_slot::LastRestartSlot;
 use solana_program_runtime::{
     invoke_context::{EnvironmentConfig, InvokeContext},
     loaded_programs::{ProgramCacheEntry, ProgramCacheForTxBatch},
@@ -9,11 +10,17 @@ use solana_program_runtime::{
 };
 use solana_sdk::{
     account::{Account, AccountSharedData, ReadableAccount, WritableAccount},
+    clock::Clock,
+    epoch_rewards::EpochRewards,
+    epoch_schedule::EpochSchedule,
     feature_set::{remove_rounding_in_fee_calculation, FeatureSet},
     fee::FeeStructure,
     native_loader,
     pubkey::Pubkey,
     rent::Rent,
+    slot_history::SlotHistory,
+    stake_history::StakeHistory,
+    sysvar::{Sysvar, SysvarId},
     transaction::{SanitizedTransaction, TransactionError},
     transaction_context::{IndexOfAccount, TransactionContext},
 };
@@ -54,12 +61,33 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         }
     }
 
+    fn set_sysvar<S>(&mut self, sysvar: &S)
+    where
+        S: Sysvar + SysvarId,
+    {
+        let account = AccountSharedData::new_data(1, &sysvar, &solana_sdk::sysvar::id()).unwrap();
+        self.sysvar_cache.fill_missing_entries(|_, set_sysvar| {
+            set_sysvar(account.data());
+        });
+    }
+
+    pub fn set_sysvars(&mut self) {
+        self.set_sysvar(&Clock::default());
+        self.set_sysvar(&EpochRewards::default());
+        self.set_sysvar(&EpochSchedule::default());
+        self.set_sysvar(&LastRestartSlot::default());
+        self.set_sysvar(&Rent::default());
+        self.set_sysvar(&SlotHistory::default());
+        self.set_sysvar(&StakeHistory::default());
+    }
+
     pub fn process_and_save_transaction(
         &self,
         id: Uuid,
         tx: SanitizedTransaction,
         current_block: Block,
     ) -> Result<(), String> {
+        println!("Processing transaction 1:",);
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses = account_keys.iter().collect();
@@ -143,6 +171,8 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 .map(|(pubkey, account_shared_data)| (pubkey, Account::from(account_shared_data)))
                 .collect(),
         )?;
+
+        println!("Transaction processed successfully");
 
         Ok(())
     }
