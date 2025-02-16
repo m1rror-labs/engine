@@ -87,24 +87,11 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         tx: SanitizedTransaction,
         current_block: Block,
     ) -> Result<(), String> {
-        println!("Processing transaction 1:",);
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses = account_keys.iter().collect();
         //TODO: I think this works, but maybe not
         let accounts_vec = self.storage.get_accounts(id, &addresses)?;
-        accounts_vec.iter().for_each(|account| {
-            if let Some(account) = account {
-                println!(
-                    "account: {:?}",
-                    account
-                        .data
-                        .iter()
-                        .map(|u| u.to_owned() as u64)
-                        .sum::<u64>()
-                );
-            }
-        });
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -171,8 +158,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 .map(|(pubkey, account_shared_data)| (pubkey, Account::from(account_shared_data)))
                 .collect(),
         )?;
-
-        println!("Transaction processed successfully");
 
         Ok(())
     }
@@ -302,7 +287,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         match maybe_program_indices {
             Ok(program_indices) => {
                 let mut context = self.create_transaction_context(compute_budget, accounts);
-                println!("Processing transaction 5:",);
                 let mut tx_result = MessageProcessor::process_message(
                     tx.message(),
                     &program_indices,
@@ -324,7 +308,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                     &mut accumulated_consume_units,
                 )
                 .map(|_| ());
-                println!("Transaction result: {:?}", tx_result);
                 if let Err(err) = self.check_accounts_rent(tx, &context, accounts_db) {
                     tx_result = Err(err);
                 };
@@ -364,17 +347,11 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             if tx.message().is_writable(index) {
                 let account = context
                     .get_account_at_index(index as IndexOfAccount)
-                    .map_err(|err| {
-                        println!("Error getting account at index: {:?}", err);
-                        TransactionError::InstructionError(index as u8, err)
-                    })?
+                    .map_err(|err| TransactionError::InstructionError(index as u8, err))?
                     .borrow();
                 let pubkey = context
                     .get_key_of_account_at_index(index as IndexOfAccount)
-                    .map_err(|err| {
-                        println!("Error getting key of account at index: {:?}", err);
-                        TransactionError::InstructionError(index as u8, err)
-                    })?;
+                    .map_err(|err| TransactionError::InstructionError(index as u8, err))?;
                 let rent = self.sysvar_cache.get_rent().unwrap_or_default();
 
                 if !account.data().is_empty() {
