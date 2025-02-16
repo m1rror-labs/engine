@@ -8,7 +8,7 @@ use crate::{
 
 use super::rpc::{parse_tx, RpcRequest};
 
-pub fn send_transaction<T: Storage + Clone>(
+pub fn send_transaction<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,

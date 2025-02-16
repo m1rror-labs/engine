@@ -10,7 +10,7 @@ use crate::{
 
 use super::rpc::{parse_tx, RpcRequest};
 
-pub fn simulate_transaction<T: Storage + Clone>(
+pub fn simulate_transaction<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,

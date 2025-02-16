@@ -37,7 +37,7 @@ pub struct RpcRequest {
     pub params: Option<serde_json::Value>,
 }
 
-pub async fn handle_ws_request<T: Storage + Clone>(
+pub async fn handle_ws_request<T: Storage + Clone + 'static>(
     id: Uuid,
     msg: &str,
     session: Session,

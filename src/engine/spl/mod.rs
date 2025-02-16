@@ -5,7 +5,7 @@ use crate::storage::Storage;
 
 use super::{SvmEngine, SVM};
 
-pub fn load_spl_programs<T: Storage + Clone>(svm: &SvmEngine<T>, id: Uuid) -> Result<(), String> {
+pub fn load_spl_programs<T: Storage + Clone + 'static>(svm: &SvmEngine<T>, id: Uuid) -> Result<(), String> {
     svm.add_program(
         id,
         pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),

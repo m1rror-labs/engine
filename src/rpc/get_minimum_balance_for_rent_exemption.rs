@@ -7,7 +7,7 @@ use crate::{
 
 use super::rpc::RpcRequest;
 
-pub fn get_minimum_balance_for_rent_exemption<T: Storage + Clone>(
+pub fn get_minimum_balance_for_rent_exemption<T: Storage + Clone + 'static>(
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {

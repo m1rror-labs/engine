@@ -10,7 +10,7 @@
 
 // use super::rpc::RpcRequest;
 
-// pub fn get_fee_for_message<T: Storage + Clone>(
+// pub fn get_fee_for_message<T: Storage + Clone + 'static>(
 //     id: Uuid,
 //     req: &RpcRequest,
 //     svm: &SvmEngine<T>,

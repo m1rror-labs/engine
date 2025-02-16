@@ -10,7 +10,7 @@ use crate::{
 
 use super::rpc::{parse_signature, RpcRequest};
 
-pub fn get_signature_statuses<T: Storage + Clone>(
+pub fn get_signature_statuses<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,

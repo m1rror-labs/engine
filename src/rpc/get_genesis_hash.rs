@@ -6,7 +6,7 @@ use crate::{
     storage::Storage,
 };
 
-pub fn get_genesis_hash<T: Storage + Clone>(id: Uuid, svm: &SvmEngine<T>) -> Result<Value, Value> {
+pub fn get_genesis_hash<T: Storage + Clone + 'static>(id: Uuid, svm: &SvmEngine<T>) -> Result<Value, Value> {
     match svm.get_genesis_hash(id) {
         Ok(hash) => Ok(serde_json::json!({
             "value": hash.to_string(),

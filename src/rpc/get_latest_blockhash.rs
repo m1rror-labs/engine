@@ -6,7 +6,7 @@ use crate::{
     storage::Storage,
 };
 
-pub fn get_latest_blockhash<T: Storage + Clone>(
+pub fn get_latest_blockhash<T: Storage + Clone + 'static>(
     id: Uuid,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {

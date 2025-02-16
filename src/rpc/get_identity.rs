@@ -6,7 +6,7 @@ use crate::{
     storage::Storage,
 };
 
-pub fn get_identity<T: Storage + Clone>(id: Uuid, svm: &SvmEngine<T>) -> Result<Value, Value> {
+pub fn get_identity<T: Storage + Clone + 'static>(id: Uuid, svm: &SvmEngine<T>) -> Result<Value, Value> {
     match svm.get_identity(id) {
         Ok(pubkey) => Ok(serde_json::json!({
             "value": pubkey.to_string(),

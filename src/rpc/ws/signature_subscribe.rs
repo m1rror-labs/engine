@@ -10,7 +10,7 @@ use crate::{
 
 use super::RpcRequest;
 
-pub async fn signature_subscribe<T: Storage + Clone>(
+pub async fn signature_subscribe<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     mut session: Session,

@@ -1,7 +1,8 @@
-use actix_web::rt::time;
+use actix_web::rt::{self, time};
 use blocks::{Block, Blockchain};
 use builtins::BUILTINS;
 use chrono::{DateTime, Utc};
+use engine::TransactionProcessor;
 use sha2::{Digest, Sha256};
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
 use solana_compute_budget::compute_budget::ComputeBudget;
@@ -43,7 +44,8 @@ use solana_sdk::{
     system_instruction, system_program,
     sysvar::{self, instructions::construct_instructions_data, Sysvar, SysvarId},
     transaction::{
-        MessageHash, SanitizedTransaction, Transaction, TransactionError, VersionedTransaction,
+        self, MessageHash, SanitizedTransaction, Transaction, TransactionError,
+        VersionedTransaction,
     },
     transaction_context::{ExecutionRecord, IndexOfAccount, TransactionContext},
 };
@@ -61,11 +63,12 @@ use crate::storage::{transactions::DbTransaction, Storage};
 
 pub mod blocks;
 pub mod builtins;
+pub mod engine;
 pub mod spl;
 pub mod tokens;
 pub mod transactions;
 
-pub trait SVM<T: Storage + Clone> {
+pub trait SVM<T: Storage + Clone + 'static> {
     fn new(storage: T) -> Self;
 
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String>;
@@ -129,22 +132,30 @@ pub trait SVM<T: Storage + Clone> {
     ) -> Result<u64, String>;
 }
 
-pub struct SvmEngine<T: Storage + Clone> {
+pub struct SvmEngine<T: Storage + Clone + 'static> {
     rent: Rent,
     fee_structure: FeeStructure,
     feature_set: FeatureSet,
     sysvar_cache: SysvarCache,
     storage: T,
+    transaction_processor: TransactionProcessor<T>,
 }
 
-impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
+impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     fn new(storage: T) -> Self {
         let mut engine = SvmEngine {
             rent: Rent::default(),
             fee_structure: FeeStructure::default(),
             feature_set: FeatureSet::all_enabled(),
             sysvar_cache: SysvarCache::default(),
-            storage,
+            storage: storage.clone(),
+            transaction_processor: TransactionProcessor::new(
+                Rent::default(),
+                FeeStructure::default(),
+                FeatureSet::all_enabled(),
+                SysvarCache::default(),
+                storage,
+            ),
         };
         engine.set_sysvars();
         engine
@@ -452,93 +463,16 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         //     return Err("Transaction cannot be replayed".to_string());
         // };
 
-        let message = tx.message();
-        let account_keys = message.account_keys();
-        let addresses = account_keys.iter().collect();
-        //TODO: I think this works, but maybe not
-        let accounts_vec = self.storage.get_accounts(id, &addresses)?;
-        accounts_vec.iter().for_each(|account| {
-            if let Some(account) = account {
-                println!(
-                    "account: {:?}",
-                    account
-                        .data
-                        .iter()
-                        .map(|u| u.to_owned() as u64)
-                        .sum::<u64>()
-                );
-            }
-        });
-        let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
-            .iter()
-            .cloned()
-            .zip(accounts_vec.into_iter())
-            .collect();
-        let accounts_db = AccountsDB::new(accounts_map.clone());
-        let log_collector = LogCollector::new_ref();
-        let (tx_result, accumulated_consume_units, context, fee, payer_key) =
-            self.process_transaction(&tx, log_collector.clone(), &accounts_db);
-        if context == None {
-            if let Err(err) = tx_result {
-                return Err(err.to_string());
-            } else {
-                return Err("Context is None".to_string());
-            }
-        }
-        //Decrement account if tx failed and payer is not None
-        if tx_result.is_err() && payer_key.is_some() {
-            let payer_key = payer_key.unwrap();
-            let payer_account = accounts_db.get_account(&payer_key).unwrap();
-            payer_account.to_owned().checked_sub_lamports(fee).unwrap();
-            self.storage
-                .set_account_lamports(id, &payer_key, payer_account.lamports())?;
-        }
-        let context = context.unwrap();
-        let (signature, return_data, inner_instructions, post_accounts) =
-            execute_tx_helper(tx.clone(), context);
-        let Ok(logs) = Rc::try_unwrap(log_collector).map(|lc| lc.into_inner().messages) else {
-            unreachable!("Log collector should not be used after send_transaction returns")
-        };
-
         let current_block = self.current_block(id)?;
-        let meta = TransactionMetadata {
-            signature,
-            err: tx_result.err(),
-            logs,
-            inner_instructions,
-            compute_units_consumed: accumulated_consume_units,
-            return_data,
-            tx: tx.clone(),
-            current_block,
-            //TODO: This may be wrong
-            pre_accounts: accounts_db
-                .accounts
-                .iter()
-                .map(|(k, v)| {
-                    if let Some(account) = v {
-                        (
-                            k.to_owned().to_owned(),
-                            AccountSharedData::from(account.to_owned()),
-                        )
-                    } else {
-                        (k.to_owned().to_owned(), AccountSharedData::default())
-                    }
-                })
-                .collect(),
-            post_accounts: post_accounts.clone(),
-        };
-        self.storage.save_transaction(id, &meta)?;
-
-        self.storage.set_accounts(
-            id,
-            post_accounts
-                .into_iter()
-                .map(|(pubkey, account_shared_data)| (pubkey, Account::from(account_shared_data)))
-                .collect(),
-        )?;
-
+        let transaction_processor = Arc::new(self.transaction_processor.clone());
+        let tx_clone = tx.clone();
+        rt::spawn(async move {
+            match transaction_processor.process_and_save_transaction(id, tx_clone, current_block) {
+                Ok(_) => {}
+                Err(e) => println!("Error processing transaction: {:?}", e),
+            };
+        });
         self.progress_block(id)?;
-
         Ok(tx.signature().to_string())
     }
 
@@ -677,7 +611,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
     }
 }
 
-impl<T: Storage + Clone> SvmEngine<T> {
+impl<T: Storage + Clone + 'static> SvmEngine<T> {
     /// Sets the sysvar to the test environment.
     pub fn set_sysvar<S>(&mut self, sysvar: &S)
     where
@@ -1181,13 +1115,13 @@ pub fn inner_instructions_list_from_instruction_trace(
 }
 
 #[derive(Clone)]
-struct Loader<T: Storage + Clone> {
+struct Loader<T: Storage + Clone + 'static> {
     storage: T,
     id: Uuid,
     sysvar_cache: SysvarCache,
 }
 
-impl<T: Storage + Clone> AddressLoader for Loader<T> {
+impl<T: Storage + Clone + 'static> AddressLoader for Loader<T> {
     fn load_addresses(
         self,
         lookups: &[solana_sdk::message::v0::MessageAddressTableLookup],
@@ -1204,7 +1138,7 @@ impl<T: Storage + Clone> AddressLoader for Loader<T> {
     }
 }
 
-impl<T: Storage + Clone> Loader<T> {
+impl<T: Storage + Clone + 'static> Loader<T> {
     fn new(storage: T, id: Uuid, sysvar_cache: SysvarCache) -> Self {
         Loader {
             storage,

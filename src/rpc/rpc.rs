@@ -164,7 +164,7 @@ pub struct RpcResponse {
     pub error: Option<Value>,
 }
 
-pub fn handle_request<T: Storage + Clone>(
+pub fn handle_request<T: Storage + Clone + 'static>(
     id: Uuid,
     req: RpcRequest,
     svm: &SvmEngine<T>,

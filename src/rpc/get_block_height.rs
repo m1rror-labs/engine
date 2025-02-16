@@ -6,7 +6,10 @@ use crate::{
     storage::Storage,
 };
 
-pub fn get_block_height<T: Storage + Clone>(id: Uuid, svm: &SvmEngine<T>) -> Result<Value, Value> {
+pub fn get_block_height<T: Storage + Clone + 'static>(
+    id: Uuid,
+    svm: &SvmEngine<T>,
+) -> Result<Value, Value> {
     match svm.latest_blockhash(id) {
         Ok(block) => {
             println!("{:?}", block.block_height);

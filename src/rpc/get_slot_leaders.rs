@@ -8,7 +8,7 @@ use crate::{
 
 use super::rpc::RpcRequest;
 
-pub fn get_slot_leaders<T: Storage + Clone>(
+pub fn get_slot_leaders<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,

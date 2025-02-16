@@ -8,7 +8,7 @@ use crate::{
 
 use super::rpc::{parse_hash, RpcRequest};
 
-pub fn is_blockhash_valid<T: Storage + Clone>(
+pub fn is_blockhash_valid<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
