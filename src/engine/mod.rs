@@ -24,7 +24,7 @@ use solana_sdk::{
     fee::FeeStructure,
     hash::Hash,
     inner_instruction::{InnerInstruction, InnerInstructionsList},
-    instruction::{CompiledInstruction, TRANSACTION_LEVEL_STACK_HEIGHT},
+    instruction::{CompiledInstruction, InstructionError, TRANSACTION_LEVEL_STACK_HEIGHT},
     message::{
         v0::{LoadedAddresses, MessageAddressTableLookup},
         AddressLoader, Message, SanitizedMessage, VersionedMessage,
@@ -92,7 +92,7 @@ pub trait SVM<T: Storage + Clone> {
     fn latest_blockhash(&self, id: Uuid) -> Result<Block, String>;
     fn current_block(&self, id: Uuid) -> Result<Block, String>;
     fn minimum_balance_for_rent_exemption(&self, data_len: usize) -> u64;
-    fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String>;
+    fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<(Block, bool), String>;
     fn get_token_accounts_by_owner(
         &self,
         id: Uuid,
@@ -325,7 +325,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         self.rent.minimum_balance(data_len)
     }
 
-    fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<bool, String> {
+    fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<(Block, bool), String> {
         let block = self.storage.get_block(id, blockhash)?;
         let block_time = match DateTime::from_timestamp(block.block_time as i64, 0) {
             Some(t) => t,
@@ -334,7 +334,7 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
         let now = Utc::now();
         let duration = now - block_time;
 
-        Ok(120 >= duration.num_seconds())
+        Ok((block, 120 >= duration.num_seconds()))
     }
 
     fn get_token_account_balance(
@@ -419,8 +419,9 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
                 confirmations: None,
                 err: tx_res.map(|e| {
                     println!("tx error: {:?}", e);
-                    TransactionError::InsufficientFundsForFee
-                }), //TODO: This is wrong
+                    TransactionError::InstructionError(0, InstructionError::Custom(12))
+                    // TODO: This is wrong
+                }),
                 confirmation_status: Some(tx_confirmation_status(created_at.and_utc())),
             },
         )))
@@ -443,20 +444,31 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             Ok(tx) => tx,
             Err(e) => return Err(e.to_string()),
         };
-
-        if !self.is_blockhash_valid(id, tx.message().recent_blockhash())? {
+        let (_, valid_blockhash) = self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
+        if !valid_blockhash {
             return Err("Blockhash is not valid".to_string());
         };
-        if self.storage.get_transaction(id, tx.signature())?.is_some() {
-            return Err("Transaction cannot be replayed".to_string());
-        };
+        // if self.storage.get_transaction(id, tx.signature())?.is_some() {
+        //     return Err("Transaction cannot be replayed".to_string());
+        // };
 
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses = account_keys.iter().collect();
         //TODO: I think this works, but maybe not
         let accounts_vec = self.storage.get_accounts(id, &addresses)?;
-        println!("accounts_vec: {:?}", accounts_vec);
+        accounts_vec.iter().for_each(|account| {
+            if let Some(account) = account {
+                println!(
+                    "account: {:?}",
+                    account
+                        .data
+                        .iter()
+                        .map(|u| u.to_owned() as u64)
+                        .sum::<u64>()
+                );
+            }
+        });
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -547,8 +559,8 @@ impl<T: Storage + Clone> SVM<T> for SvmEngine<T> {
             Ok(tx) => tx,
             Err(e) => return Err(e.to_string()),
         };
-
-        if !self.is_blockhash_valid(id, tx.message().recent_blockhash())? {
+        let (_, valid_blockhash) = self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
+        if !valid_blockhash {
             return Err("Blockhash is not valid".to_string());
         };
         if self.storage.get_transaction(id, tx.signature())?.is_some() {

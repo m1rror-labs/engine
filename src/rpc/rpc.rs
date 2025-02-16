@@ -17,7 +17,7 @@ use super::{
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_multiple_accounts::get_multiple_accounts, get_signature_statuses::get_signature_statuses,
-    get_signatures_for_address::get_signatures_for_address,
+    get_signatures_for_address::get_signatures_for_address, get_slot_leaders::get_slot_leaders,
     get_token_account_balance::get_token_account_balance,
     get_token_accounts_by_owner::get_token_accounts_by_owner, get_token_supply::get_token_supply,
     get_transaction::get_transaction, get_transaction_count::get_transaction_count,
@@ -177,7 +177,7 @@ pub fn handle_request<T: Storage + Clone>(
         RpcMethod::GetBlockHeight => get_block_height(id, svm),
         RpcMethod::GetBlockProduction => Ok(serde_json::json!({
                 "context": {
-                  "slot": 9887
+                  "slot": 9887,"apiVersion":"1.18.1"
                 },
                 "value": {
                   "byIdentity": {
@@ -209,7 +209,7 @@ pub fn handle_request<T: Storage + Clone>(
                 "warmup": true
         })),
         RpcMethod::GetFeeForMessage => Ok(serde_json::json!({
-            "context": { "slot": 5068 }, "value": 5000
+            "context": { "slot": 5068,"apiVersion":"1.18.1" }, "value": 5000
         })),
         RpcMethod::GetFirstAvailableBlock => Ok(serde_json::json!(0)),
         RpcMethod::GetGenesisHash => get_genesis_hash(id, svm),
@@ -268,20 +268,17 @@ pub fn handle_request<T: Storage + Clone>(
         RpcMethod::GetSignatureStatuses => get_signature_statuses(id, &req, svm),
         RpcMethod::GetSlot => get_block_height(id, svm),
         RpcMethod::GetSlotLeader => get_identity(id, svm),
-        RpcMethod::GetSlotLeaders => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetSlotLeaders => get_slot_leaders(id, &req, svm),
         RpcMethod::GetStakeMinimumDelegation => Err(serde_json::json!({
             "context": {
-                "slot": 501
+                "slot": 501,"apiVersion":"1.18.1"
               },
               "value": 1000000000
         })),
         //TODO: fix this
         RpcMethod::GetSupply => Ok(serde_json::json!({
             "context": {
-                "slot": 1114
+                "slot": 1114,"apiVersion":"1.18.1"
               },
               "value": {
                 "circulating": 16000,

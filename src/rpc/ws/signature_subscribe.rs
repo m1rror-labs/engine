@@ -72,7 +72,7 @@ pub async fn signature_subscribe<T: Storage + Clone>(
                       "params": {
                         "result": {
                           "context": {
-                            "slot": slot+3
+                            "slot": slot+3,"apiVersion":"1.18.1"
                           },
                           "value": {
                             "err": null

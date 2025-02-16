@@ -32,7 +32,7 @@ pub fn get_token_supply<T: Storage + Clone>(
     match svm.get_token_supply(id, &pubkey) {
         Ok(amount) => match amount {
             Some(amount) => Ok(serde_json::json!({
-                "context": { "slot": 341197053 },
+                "context": { "slot": 341197053,"apiVersion":"1.18.1" },
                 "value":  amount,
             })),
             None => Err(serde_json::json!({

@@ -35,7 +35,7 @@ pub fn get_account_info<T: Storage + Clone>(
             Some(account) => {
                 let data_str = BASE64_STANDARD.encode(&account.data);
                 Ok(serde_json::json!({
-                    "context": { "slot": 341197053 },
+                    "context": { "slot": 341197053,"apiVersion":"1.18.1" },
                     "value": {
                         "data": [ data_str,"base64"],
                         "executable": account.executable,
@@ -47,7 +47,7 @@ pub fn get_account_info<T: Storage + Clone>(
                 }))
             }
             None => Ok(serde_json::json!({
-                "context": { "slot": 341197053 },
+                "context": { "slot": 341197053,"apiVersion":"1.18.1" },
                 "value": null,
             })),
         },

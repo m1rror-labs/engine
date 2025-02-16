@@ -32,11 +32,11 @@ pub fn get_balance<T: Storage + Clone>(
     match svm.get_balance(id, &pubkey) {
         Ok(balance) => match balance {
             Some(balance) => Ok(serde_json::json!({
-                "context": { "slot": 341197053 },
+                "context": { "slot": 341197053,"apiVersion":"1.18.1" },
                 "value": balance,
             })),
             None => Ok(serde_json::json!({
-                "context": { "slot": 341197053 },
+                "context": { "slot": 341197053,"apiVersion":"1.18.1" },
                 "value": 0,
             })),
         },

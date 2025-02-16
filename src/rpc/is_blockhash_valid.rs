@@ -29,15 +29,15 @@ pub fn is_blockhash_valid<T: Storage + Clone>(
     };
     let hash = parse_hash(hash_str)?;
 
-    let res = svm.is_blockhash_valid(id, &hash)?;
+    let (block, res) = svm.is_blockhash_valid(id, &hash)?;
     if res {
         Ok(serde_json::json!({
-            "context": { "slot": 341197053 },
+            "context": { "slot": block.block_height,"apiVersion":"1.18.1" },
             "value": true,
         }))
     } else {
         Ok(serde_json::json!({
-            "context": { "slot": 341197053 },
+            "context": { "slot": block.block_height,"apiVersion":"1.18.1" },
             "value": false,
         }))
     }

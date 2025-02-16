@@ -36,6 +36,8 @@ pub fn send_transaction<T: Storage + Clone>(
         }
     };
 
+    println!("Instructions: {:?}", tx.message.instructions());
+
     match svm.send_transaction(id, tx) {
         Ok(res) => Ok(serde_json::json!(res)),
         Err(e) => Err(serde_json::json!({
