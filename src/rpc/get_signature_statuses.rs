@@ -15,8 +15,6 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
-    println!("get_signature_statuses");
-    println!("{:?}", req);
     let sig_raw_arr = match req
         .params
         .as_ref()
@@ -86,51 +84,4 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
         })
         .collect::<Vec<Value>>(),
     }))
-
-    // match svm.get_transaction(id, &signature) {
-    //     Ok(transaction) => match transaction {
-    //         Some((_, status)) => {
-    //             let status_value = match status.err.clone() {
-    //                 Some(err) => {
-    //                     serde_json::json!({
-    //                         "err": err,
-    //                     })
-    //                 }
-    //                 None => {
-    //                     serde_json::json!({
-    //                             "Ok": null
-    //                     })
-    //                 }
-    //             };
-    //             Ok(serde_json::json!({
-    //                 "context": { "slot": status.slot,"apiVersion":"1.18.1" },
-    //                 "value": [
-    //                     {
-    //                       "slot": status.slot,
-    //                       "confirmations": null,
-    //                       "err": status.err,
-    //                       "status": status_value,
-    //                       "confirmationStatus": match status.confirmation_status {
-    //                           Some(status) => match status {
-    //                               TransactionConfirmationStatus::Finalized => "finalized",
-    //                               TransactionConfirmationStatus::Confirmed => "confirmed",
-    //                               TransactionConfirmationStatus::Processed => "processed",
-    //                           },
-    //                           None => "processed",
-    //                       }
-    //                     },
-    //                     null
-    //                   ]
-    //             }))
-    //         }
-    //         None => Ok(serde_json::json!({
-    //             "context": { "slot": 341197053,"apiVersion":"1.18.1" },
-    //             "value": null,
-    //         })),
-    //     },
-    //     Err(e) => Err(serde_json::json!({
-    //         "code": -32002,
-    //         "message": e,
-    //     })),
-    // }
 }

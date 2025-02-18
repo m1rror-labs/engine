@@ -34,10 +34,14 @@ pub fn get_account_info<T: Storage + Clone + 'static>(
         Ok(account) => match account {
             Some(account) => {
                 let data_str = BASE64_STANDARD.encode(&account.data);
+                println!("account: {:?}", account.data);
+                let bytes = include_bytes!("./mpl_project_name_program.so");
+                // println!("original program: {:?}", bytes);
                 Ok(serde_json::json!({
                     "context": { "slot": 341197053,"apiVersion":"1.18.1" },
                     "value": {
                         "data": [ data_str,"base64"],
+                        "program": [BASE64_STANDARD.encode(&bytes)],
                         "executable": account.executable,
                         "lamports": account.lamports,
                         "owner": account.owner.to_string(),

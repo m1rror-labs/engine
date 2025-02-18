@@ -137,26 +137,33 @@ pub struct SvmEngine<T: Storage + Clone + 'static> {
     feature_set: FeatureSet,
     sysvar_cache: SysvarCache,
     storage: T,
-    transaction_processor: TransactionProcessor<T>,
+    transaction_processor: Arc<TransactionProcessor<T>>,
 }
 
 impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     fn new(storage: T) -> Self {
+        let tx_processor = TransactionProcessor::new(
+            Rent::default(),
+            FeeStructure::default(),
+            FeatureSet::all_enabled(),
+            SysvarCache::default(),
+            storage.clone(),
+        );
         let mut engine = SvmEngine {
             rent: Rent::default(),
             fee_structure: FeeStructure::default(),
             feature_set: FeatureSet::all_enabled(),
             sysvar_cache: SysvarCache::default(),
-            storage: storage.clone(),
-            transaction_processor: TransactionProcessor::new(
-                Rent::default(),
-                FeeStructure::default(),
-                FeatureSet::all_enabled(),
-                SysvarCache::default(),
-                storage,
-            ),
+            storage: storage,
+            transaction_processor: tx_processor,
         };
         engine.set_sysvars();
+
+        // let cloned_processor = engine.transaction_processor.clone();
+        // rt::spawn(async move {
+        //     cloned_processor.clone().start_processing();
+        // });
+
         engine
     }
 
@@ -417,7 +424,10 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         id: Uuid,
         signature: &Signature,
     ) -> Result<Option<(Transaction, TransactionStatus)>, String> {
-        let res = self.storage.get_transaction(id, signature)?;
+        let res = match self.storage.get_transaction(id, signature) {
+            Ok(res) => res,
+            Err(_) => return Ok(None),
+        };
         if res == None {
             return Ok(None);
         }
@@ -442,37 +452,20 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     }
 
     fn send_transaction(&self, id: Uuid, raw_tx: VersionedTransaction) -> Result<String, String> {
-        let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
-
-        let tx = match SanitizedTransaction::try_create(
-            raw_tx,
-            MessageHash::Compute,
-            Some(false),
-            address_loader,
-            &ReservedAccountKeys::empty_key_set(),
-        ) {
-            Ok(tx) => tx,
-            Err(e) => return Err(e.to_string()),
-        };
-        let (_, valid_blockhash) = self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
-        if !valid_blockhash {
-            return Err("Blockhash is not valid".to_string());
-        };
         // if self.storage.get_transaction(id, tx.signature())?.is_some() {
         //     return Err("Transaction cannot be replayed".to_string());
         // };
+        let tx_processor = self.transaction_processor.clone();
+        let tx_clone = raw_tx.clone();
+        if raw_tx.signatures.len() < 1 {
+            return Err("Transaction must include signatures".to_string());
+        }
 
-        let current_block = self.current_block(id)?;
-        let transaction_processor = Arc::new(self.transaction_processor.clone());
-        let tx_clone = tx.clone();
         rt::spawn(async move {
-            match transaction_processor.process_and_save_transaction(id, tx_clone, current_block) {
-                Ok(_) => {}
-                Err(e) => println!("Error processing transaction: {:?}", e),
-            };
+            tx_processor.queue_transaction(id, tx_clone).await;
         });
-        self.progress_block(id)?;
-        Ok(tx.signature().to_string())
+
+        Ok(raw_tx.signatures[0].to_string())
     }
 
     fn simulate_transaction(
@@ -630,7 +623,6 @@ impl<T: Storage + Clone + 'static> SvmEngine<T> {
         self.set_sysvar(&Rent::default());
         self.set_sysvar(&SlotHistory::default());
         self.set_sysvar(&StakeHistory::default());
-        self.transaction_processor.set_sysvars();
     }
 
     fn create_transaction_context(
@@ -812,7 +804,6 @@ impl<T: Storage + Clone + 'static> SvmEngine<T> {
         match maybe_program_indices {
             Ok(program_indices) => {
                 let mut context = self.create_transaction_context(compute_budget, accounts);
-                println!("Processing transaction 5:",);
                 let mut tx_result = MessageProcessor::process_message(
                     tx.message(),
                     &program_indices,

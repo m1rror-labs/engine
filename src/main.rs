@@ -27,8 +27,8 @@ async fn rpc_reqest(
 ) -> impl Responder {
     let id = path.into_inner();
     let res = handle_request(id, req.clone(), &svm);
-    println!("{:?}", req.method);
-    println!("{:?}", res);
+    // println!("{:?}", req.method);
+    // println!("{:?}", res);
     HttpResponse::Ok().json(res)
 }
 

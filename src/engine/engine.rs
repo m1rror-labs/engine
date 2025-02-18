@@ -1,5 +1,5 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
-
+use actix_web::rt;
+use chrono::{DateTime, Utc};
 use solana_compute_budget::compute_budget::ComputeBudget;
 use solana_log_collector::LogCollector;
 use solana_program::last_restart_slot::LastRestartSlot;
@@ -15,24 +15,28 @@ use solana_sdk::{
     epoch_schedule::EpochSchedule,
     feature_set::{remove_rounding_in_fee_calculation, FeatureSet},
     fee::FeeStructure,
+    hash::Hash,
     native_loader,
     pubkey::Pubkey,
     rent::Rent,
+    reserved_account_keys::ReservedAccountKeys,
     slot_history::SlotHistory,
     stake_history::StakeHistory,
     sysvar::{Sysvar, SysvarId},
-    transaction::{SanitizedTransaction, TransactionError},
+    transaction::{MessageHash, SanitizedTransaction, TransactionError, VersionedTransaction},
     transaction_context::{IndexOfAccount, TransactionContext},
 };
 use solana_svm::message_processor::MessageProcessor;
 use solana_timings::ExecuteTimings;
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use tokio::sync::mpsc::{self};
 use uuid::Uuid;
 
 use crate::storage::Storage;
 
 use super::{
     blocks::Block, builtins::BUILTINS, construct_instructions_account, execute_tx_helper,
-    transactions::TransactionMetadata, validate_fee_payer, AccountsDB, RentState,
+    transactions::TransactionMetadata, validate_fee_payer, AccountsDB, Loader, RentState,
 };
 
 #[derive(Clone)]
@@ -42,6 +46,7 @@ pub struct TransactionProcessor<T: Storage + Clone + 'static> {
     feature_set: FeatureSet,
     sysvar_cache: SysvarCache,
     storage: T,
+    transaction_sender: mpsc::Sender<(Uuid, VersionedTransaction)>,
 }
 
 impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
@@ -51,13 +56,38 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         feature_set: FeatureSet,
         sysvar_cache: SysvarCache,
         storage: T,
-    ) -> Self {
-        Self {
+    ) -> Arc<Self> {
+        let (transaction_sender, mut transaction_receiver) = mpsc::channel(100);
+
+        let mut raw_engine = Self {
+            transaction_sender,
             rent,
             fee_structure,
             feature_set,
             sysvar_cache,
             storage,
+        };
+        raw_engine.set_sysvars();
+        let engine = Arc::new(raw_engine);
+        let engine_clone = Arc::clone(&engine);
+
+        // Spawn a task to process transactions
+        rt::spawn(async move {
+            while let Some((id, raw_tx)) = transaction_receiver.recv().await {
+                match engine_clone.process_and_save_transaction(id, raw_tx) {
+                    Ok(_) => println!("Transaction processed successfully"),
+                    Err(e) => println!("Transaction processing failed: {}", e),
+                }
+            }
+        });
+
+        engine
+    }
+
+    pub async fn queue_transaction(&self, id: Uuid, raw_tx: VersionedTransaction) {
+        println!("Queueing transaction");
+        if let Err(e) = self.transaction_sender.send((id, raw_tx)).await {
+            println!("Failed to queue transaction: {}", e);
         }
     }
 
@@ -81,12 +111,28 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         self.set_sysvar(&StakeHistory::default());
     }
 
-    pub fn process_and_save_transaction(
+    fn process_and_save_transaction(
         &self,
         id: Uuid,
-        tx: SanitizedTransaction,
-        current_block: Block,
+        raw_tx: VersionedTransaction,
     ) -> Result<(), String> {
+        let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
+
+        let tx = match SanitizedTransaction::try_create(
+            raw_tx,
+            MessageHash::Compute,
+            Some(false),
+            address_loader,
+            &ReservedAccountKeys::empty_key_set(),
+        ) {
+            Ok(tx) => tx,
+            Err(e) => return Err(e.to_string()),
+        };
+        let (current_block, valid_blockhash) =
+            self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
+        if !valid_blockhash {
+            return Err("Blockhash is not valid".to_string());
+        };
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses = account_keys.iter().collect();
@@ -370,5 +416,17 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             }
         }
         Ok(())
+    }
+
+    pub fn is_blockhash_valid(&self, id: Uuid, blockhash: &Hash) -> Result<(Block, bool), String> {
+        let block = self.storage.get_block(id, blockhash)?;
+        let block_time = match DateTime::from_timestamp(block.block_time as i64, 0) {
+            Some(t) => t,
+            None => return Err("Invalid block time".to_string()),
+        };
+        let now = Utc::now();
+        let duration = now - block_time;
+
+        Ok((block, 120 >= duration.num_seconds()))
     }
 }
