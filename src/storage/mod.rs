@@ -194,6 +194,20 @@ impl Storage for PgStorage {
         let db_account = DbAccount::from_account(address, &account, label, id);
         diesel::insert_into(crate::schema::accounts::table)
             .values(&db_account)
+            .on_conflict((
+                crate::schema::accounts::address,
+                crate::schema::accounts::blockchain,
+            ))
+            .do_update()
+            .set((
+                crate::schema::accounts::lamports.eq(excluded(crate::schema::accounts::lamports)),
+                crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
+                crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
+                crate::schema::accounts::executable
+                    .eq(excluded(crate::schema::accounts::executable)),
+                crate::schema::accounts::rent_epoch
+                    .eq(excluded(crate::schema::accounts::rent_epoch)),
+            ))
             .execute(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -218,6 +232,8 @@ impl Storage for PgStorage {
                 crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
                 crate::schema::accounts::executable
                     .eq(excluded(crate::schema::accounts::executable)),
+                crate::schema::accounts::rent_epoch
+                    .eq(excluded(crate::schema::accounts::rent_epoch)),
             ))
             .execute(&mut conn)
             .map_err(|e| e.to_string())?;

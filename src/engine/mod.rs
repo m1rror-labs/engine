@@ -179,7 +179,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             let tx = self.get_transaction(id, signature)?;
             println!("Checking transaction:");
             if tx == None {
-                return Err("Transaction not found".to_string());
+                continue;
             }
             if let Some((_, status)) = tx {
                 println!("Transaction status: {:?}", status);

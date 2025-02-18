@@ -1,6 +1,5 @@
-use std::{env, sync::Arc};
-
 use actix_cors::Cors;
+use actix_multipart::Multipart;
 use actix_web::{
     get, middleware, post, rt, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
 };
@@ -15,6 +14,8 @@ use mockchain_engine::{
     },
     storage::{self, PgStorage},
 };
+use solana_sdk::pubkey::Pubkey;
+use std::{env, sync::Arc};
 
 use serde_json::json;
 use uuid::Uuid;
@@ -27,9 +28,53 @@ async fn rpc_reqest(
 ) -> impl Responder {
     let id = path.into_inner();
     let res = handle_request(id, req.clone(), &svm);
-    // println!("{:?}", req.method);
-    // println!("{:?}", res);
+    println!("{:?}", req.method);
+    println!("{:?}", res);
     HttpResponse::Ok().json(res)
+}
+
+#[post("/programs/{id}")]
+async fn load_program(
+    mut payload: Multipart,
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    path: web::Path<Uuid>,
+) -> impl Responder {
+    let id = path.into_inner();
+    let mut program_data = Vec::new();
+    let mut program_id_str = String::new();
+
+    // Parse the file from the request
+    while let Some(item) = payload.next().await {
+        let mut field = item.unwrap();
+        if field.name() == Some("program") {
+            while let Some(chunk) = field.next().await {
+                let data = chunk.unwrap();
+                program_data.extend_from_slice(&data);
+            }
+        }
+        if field.name() == Some("program_id") {
+            while let Some(chunk) = field.next().await {
+                let data = chunk.unwrap();
+                program_id_str.push_str(&String::from_utf8_lossy(&data));
+            }
+        }
+    }
+
+    let program_id = match program_id_str.parse() {
+        Ok(program_id) => program_id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(json!({
+              "message": "Invalid program id"
+            }));
+        }
+    };
+
+    match svm.add_program(id, program_id, &program_data) {
+        Ok(_) => HttpResponse::Ok().json(json!({
+            "message": "Program loaded successfully"
+        })),
+        Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+    }
 }
 
 #[post("/blockchains")]
@@ -142,6 +187,7 @@ async fn main() -> std::io::Result<()> {
             .service(rpc_reqest)
             .service(create_blockchain)
             .service(get_blockchains)
+            .service(load_program)
     })
     .bind(("0.0.0.0", 8080))?
     .run()
