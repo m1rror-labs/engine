@@ -40,7 +40,7 @@ pub fn get_account_info<T: Storage + Clone + 'static>(
                 Ok(serde_json::json!({
                     "context": { "slot": 341197053,"apiVersion":"1.18.1" },
                     "value": {
-                        "data": [ data_str,"base64"],
+                        "data": [ "","base64"],
                         "program": [BASE64_STANDARD.encode(&bytes)],
                         "executable": account.executable,
                         "lamports": account.lamports,

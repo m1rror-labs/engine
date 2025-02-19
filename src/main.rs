@@ -14,7 +14,6 @@ use mockchain_engine::{
     },
     storage::{self, PgStorage},
 };
-use solana_sdk::pubkey::Pubkey;
 use std::{env, sync::Arc};
 
 use serde_json::json;

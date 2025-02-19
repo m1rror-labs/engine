@@ -47,7 +47,7 @@ impl DbAccount {
             data: self.data,
             owner: Pubkey::from_str(&self.owner).unwrap(),
             executable: self.executable,
-            rent_epoch: self.rent_epoch.try_into().unwrap(),
+            rent_epoch: 1000000000000,
         }
     }
 }

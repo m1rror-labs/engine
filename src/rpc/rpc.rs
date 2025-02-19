@@ -1,11 +1,15 @@
 use std::{fmt, str::FromStr};
 
 use base64::prelude::*;
+use bincode::Options;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use solana_sdk::{
-    hash::Hash, pubkey::Pubkey, signature::Signature, transaction::VersionedTransaction,
+    bs58, hash::Hash, packet::PACKET_DATA_SIZE, pubkey::Pubkey, signature::Signature,
+    transaction::VersionedTransaction,
 };
+use solana_transaction_status_client_types::TransactionBinaryEncoding;
+use std::any::type_name;
 use uuid::Uuid;
 
 use crate::{engine::SvmEngine, storage::Storage};
@@ -403,4 +407,66 @@ pub fn parse_tx(tx_str: Value) -> Result<VersionedTransaction, Value> {
             "message": "Invalid params: unable to parse tx",
         })),
     }
+}
+
+const MAX_BASE58_SIZE: usize = 1683; // Golden, bump if PACKET_DATA_SIZE changes
+const MAX_BASE64_SIZE: usize = 1644; // Golden, bump if PACKET_DATA_SIZE changes
+pub fn decode_and_deserialize<T>(
+    encoded: String,
+    encoding: TransactionBinaryEncoding,
+) -> Result<(Vec<u8>, T), String>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let wire_output = match encoding {
+        TransactionBinaryEncoding::Base58 => {
+            if encoded.len() > MAX_BASE58_SIZE {
+                return Err(format!(
+                    "base58 encoded {} too large: {} bytes (max: encoded/raw {}/{})",
+                    type_name::<T>(),
+                    encoded.len(),
+                    MAX_BASE58_SIZE,
+                    PACKET_DATA_SIZE,
+                ));
+            }
+            bs58::decode(encoded)
+                .into_vec()
+                .map_err(|e| format!("invalid base58 encoding: {e:?}"))?
+        }
+        TransactionBinaryEncoding::Base64 => {
+            if encoded.len() > MAX_BASE64_SIZE {
+                return Err(format!(
+                    "base64 encoded {} too large: {} bytes (max: encoded/raw {}/{})",
+                    type_name::<T>(),
+                    encoded.len(),
+                    MAX_BASE64_SIZE,
+                    PACKET_DATA_SIZE,
+                ));
+            }
+            BASE64_STANDARD
+                .decode(encoded)
+                .map_err(|e| format!("invalid base64 encoding: {e:?}"))?
+        }
+    };
+    if wire_output.len() > PACKET_DATA_SIZE {
+        return Err(format!(
+            "decoded {} too large: {} bytes (max: {} bytes)",
+            type_name::<T>(),
+            wire_output.len(),
+            PACKET_DATA_SIZE
+        ));
+    }
+    bincode::options()
+        .with_limit(PACKET_DATA_SIZE as u64)
+        .with_fixint_encoding()
+        .allow_trailing_bytes()
+        .deserialize_from(&wire_output[..])
+        .map_err(|err| {
+            format!(
+                "failed to deserialize {}: {}",
+                type_name::<T>(),
+                &err.to_string()
+            )
+        })
+        .map(|output| (wire_output, output))
 }

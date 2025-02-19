@@ -50,7 +50,7 @@ pub fn get_multiple_accounts<T: Storage + Clone + 'static>(
                 Some(account) => {
                     let data_str = BASE64_STANDARD.encode(&account.data);
                     serde_json::json!({
-                        "data": [ data_str,"base64"],
+                        "data": [ "","base64"],
                         "executable": account.executable,
                         "lamports": account.lamports,
                         "owner": account.owner.to_string(),

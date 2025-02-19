@@ -1,5 +1,8 @@
 use actix_web::rt;
 use chrono::{DateTime, Utc};
+use solana_bpf_loader_program::syscalls::{
+    create_program_runtime_environment_v1, create_program_runtime_environment_v2,
+};
 use solana_compute_budget::compute_budget::ComputeBudget;
 use solana_log_collector::LogCollector;
 use solana_program::last_restart_slot::LastRestartSlot;
@@ -229,6 +232,19 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 ProgramCacheEntry::new_builtin(0, builtint.name.len(), builtint.entrypoint);
             program_cache_for_tx_batch.replenish(builtint.program_id, Arc::new(loaded_program));
         });
+        let program_runtime_v1 = create_program_runtime_environment_v1(
+            &self.feature_set,
+            &ComputeBudget::default(),
+            false,
+            true,
+        )
+        .unwrap();
+
+        let program_runtime_v2 =
+            create_program_runtime_environment_v2(&ComputeBudget::default(), true);
+
+        program_cache_for_tx_batch.environments.program_runtime_v1 = Arc::new(program_runtime_v1);
+        program_cache_for_tx_batch.environments.program_runtime_v2 = Arc::new(program_runtime_v2);
         let mut accumulated_consume_units = 0;
         let message = tx.message();
         let account_keys = message.account_keys();
@@ -354,6 +370,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                     &mut accumulated_consume_units,
                 )
                 .map(|_| ());
+                println!("Transaction result: {:?}", tx_result);
                 if let Err(err) = self.check_accounts_rent(tx, &context, accounts_db) {
                     tx_result = Err(err);
                 };

@@ -2168,6 +2168,7 @@ dependencies = [
  "solana-config-program",
  "solana-fee",
  "solana-log-collector",
+ "solana-metrics",
  "solana-program",
  "solana-program-runtime",
  "solana-sdk",
@@ -2176,6 +2177,7 @@ dependencies = [
  "solana-svm",
  "solana-system-program",
  "solana-timings",
+ "solana-transaction-status-client-types",
  "solana-vote-program",
  "spl-token",
  "tokio",
@@ -3046,6 +3048,21 @@ dependencies = [
  "serde_derive",
  "solana-instruction",
  "solana-program",
+]
+
+[[package]]
+name = "solana-account-decoder-client-types"
+version = "2.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "508a03567b2b5421f9e0f01518f77eb1d0131d1c48f5f22223fe626d6902b622"
+dependencies = [
+ "base64 0.22.1",
+ "bs58",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "solana-account",
+ "solana-pubkey",
 ]
 
 [[package]]
@@ -4006,6 +4023,24 @@ dependencies = [
  "serde_derive",
  "solana-instruction",
  "solana-sanitize",
+]
+
+[[package]]
+name = "solana-transaction-status-client-types"
+version = "2.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d699c9fb614eb6c5e85ad5992c7ce13cfa8fcc107e3d44c3767386c1c3d96b96"
+dependencies = [
+ "base64 0.22.1",
+ "bincode",
+ "bs58",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "solana-account-decoder-client-types",
+ "solana-sdk",
+ "solana-signature",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
