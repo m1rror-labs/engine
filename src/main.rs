@@ -166,27 +166,28 @@ async fn main() -> std::io::Result<()> {
     let storage = storage::PgStorage::new(&database_url);
     let svm = Arc::new(SvmEngine::new(storage.clone()));
 
-    // Spawn new thread
-    rt::spawn(async move {
-        let storage = storage::PgStorage::new(&database_url);
-        let svm = Arc::new(SvmEngine::new(storage.clone()));
-        HttpServer::new(move || {
-            App::new()
-                .app_data(web::Data::new(svm.clone())) // Share dependencies
-                .wrap(middleware::Logger::default())
-                .wrap(
-                    Cors::default()
-                        .allow_any_origin()
-                        .allow_any_method()
-                        .allow_any_header()
-                        .supports_credentials(),
-                )
-                .route("/rpc/{id}", web::get().to(rpc_ws))
-        })
-        .bind(("0.0.0.0", 8080))?
-        .run()
-        .await
-    });
+    if env::var("ENV").unwrap_or_else(|_| "prod".to_string()) == "dev" {
+        rt::spawn(async move {
+            let storage = storage::PgStorage::new(&database_url);
+            let svm = Arc::new(SvmEngine::new(storage.clone()));
+            HttpServer::new(move || {
+                App::new()
+                    .app_data(web::Data::new(svm.clone())) // Share dependencies
+                    .wrap(middleware::Logger::default())
+                    .wrap(
+                        Cors::default()
+                            .allow_any_origin()
+                            .allow_any_method()
+                            .allow_any_header()
+                            .supports_credentials(),
+                    )
+                    .route("/rpc/{id}", web::get().to(rpc_ws))
+            })
+            .bind(("0.0.0.0", 8081))?
+            .run()
+            .await
+        });
+    }
 
     HttpServer::new(move || {
         App::new()
@@ -199,6 +200,7 @@ async fn main() -> std::io::Result<()> {
                     .allow_any_header()
                     .supports_credentials(),
             )
+            .service(web::resource("/rpc/{id}").route(web::get().to(rpc_ws))) // WebSocket route
             .service(rpc_reqest)
             .service(create_blockchain)
             .service(get_blockchains)
