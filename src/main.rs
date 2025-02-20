@@ -183,7 +183,7 @@ async fn main() -> std::io::Result<()> {
                 )
                 .route("/rpc/{id}", web::get().to(rpc_ws))
         })
-        .bind(("0.0.0.0", 8081))?
+        .bind(("0.0.0.0", 8080))?
         .run()
         .await
     });
