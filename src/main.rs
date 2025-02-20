@@ -20,7 +20,6 @@ use std::{env, sync::Arc};
 use serde_json::json;
 use uuid::Uuid;
 
-#[post("/rpc/{id}")]
 async fn rpc_reqest(
     req: web::Json<RpcRequest>,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
@@ -200,8 +199,11 @@ async fn main() -> std::io::Result<()> {
                     .allow_any_header()
                     .supports_credentials(),
             )
-            .service(web::resource("/rpc/{id}").route(web::get().to(rpc_ws))) // WebSocket route
-            .service(rpc_reqest)
+            .service(
+                web::resource("/rpc/{id}")
+                    .route(web::get().to(rpc_ws))
+                    .route(web::post().to(rpc_reqest)),
+            )
             .service(create_blockchain)
             .service(get_blockchains)
             .service(delete_blockchain)
