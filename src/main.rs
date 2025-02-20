@@ -59,11 +59,11 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::resource("/rpc/{id}")
                     .route(web::get().to(rpc_ws))
+                    .route(web::delete().to(delete_blockchain))
                     .route(web::post().to(rpc_reqest)),
             )
             .service(create_blockchain)
             .service(get_blockchains)
-            .service(delete_blockchain)
             .service(load_program)
     })
     .bind(("0.0.0.0", 8080))?

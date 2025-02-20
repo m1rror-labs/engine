@@ -136,7 +136,6 @@ pub async fn get_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl 
     }
 }
 
-#[delete("/blockchains/{id}")]
 pub async fn delete_blockchain(
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
