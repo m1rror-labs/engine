@@ -25,7 +25,7 @@ use solana_sdk::{
     fee::FeeStructure,
     hash::Hash,
     inner_instruction::{InnerInstruction, InnerInstructionsList},
-    instruction::{CompiledInstruction, InstructionError, TRANSACTION_LEVEL_STACK_HEIGHT},
+    instruction::{CompiledInstruction, TRANSACTION_LEVEL_STACK_HEIGHT},
     message::{
         v0::{LoadedAddresses, MessageAddressTableLookup},
         AddressLoader, Message, SanitizedMessage, VersionedMessage,
