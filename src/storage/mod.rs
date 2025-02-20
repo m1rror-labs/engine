@@ -11,6 +11,7 @@ use diesel::sql_types::{Binary, Bool};
 use diesel::upsert::excluded;
 
 use solana_sdk::instruction::Instruction;
+use solana_sdk::transaction::TransactionError;
 use solana_sdk::{
     account::Account, hash::Hash, pubkey::Pubkey, signature::Signature, transaction::Transaction,
 };
@@ -65,7 +66,15 @@ pub trait Storage {
         &self,
         id: Uuid,
         signature: &Signature,
-    ) -> Result<Option<(Transaction, u64, Option<String>, chrono::NaiveDateTime)>, String>;
+    ) -> Result<
+        Option<(
+            Transaction,
+            u64,
+            Option<TransactionError>,
+            chrono::NaiveDateTime,
+        )>,
+        String,
+    >;
     fn get_transactions_for_address(
         &self,
         id: Uuid,
@@ -349,7 +358,15 @@ impl Storage for PgStorage {
         &self,
         id: Uuid,
         signature: &Signature,
-    ) -> Result<Option<(Transaction, u64, Option<String>, chrono::NaiveDateTime)>, String> {
+    ) -> Result<
+        Option<(
+            Transaction,
+            u64,
+            Option<TransactionError>,
+            chrono::NaiveDateTime,
+        )>,
+        String,
+    > {
         let mut conn = self.get_connection()?;
 
         let res: Vec<(
@@ -461,7 +478,16 @@ impl Storage for PgStorage {
                 message: solana_sdk::message::Message::new(&instructions, None),
             },
             db_tx.slot as u64,
-            tx_meta.to_owned().err,
+            match tx_meta.to_owned().err {
+                Some(e) => {
+                    let deserialized_error: Result<TransactionError, _> = serde_json::from_str(&e);
+                    match deserialized_error {
+                        Ok(e) => Some(e),
+                        Err(_) => Some(TransactionError::InvalidAccountIndex),
+                    }
+                }
+                None => None,
+            },
             db_tx.created_at,
         )))
     }

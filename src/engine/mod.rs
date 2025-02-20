@@ -437,11 +437,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             TransactionStatus {
                 slot,
                 confirmations: None,
-                err: tx_res.map(|e| {
-                    println!("tx error: {:?}", e);
-                    TransactionError::InstructionError(0, InstructionError::Custom(12))
-                    // TODO: This is wrong
-                }),
+                err: tx_res,
                 confirmation_status: Some(tx_confirmation_status(created_at.and_utc())),
             },
         )))

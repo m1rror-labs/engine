@@ -31,7 +31,12 @@ use solana_sdk::{
 };
 use solana_svm::message_processor::MessageProcessor;
 use solana_timings::ExecuteTimings;
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::mpsc::{self};
 use uuid::Uuid;
 
@@ -49,7 +54,7 @@ pub struct TransactionProcessor<T: Storage + Clone + 'static> {
     feature_set: FeatureSet,
     sysvar_cache: SysvarCache,
     storage: T,
-    transaction_sender: mpsc::Sender<(Uuid, VersionedTransaction)>,
+    queue_senders: Arc<Mutex<HashMap<Uuid, mpsc::Sender<(Uuid, VersionedTransaction)>>>>,
 }
 
 impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
@@ -60,10 +65,8 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         sysvar_cache: SysvarCache,
         storage: T,
     ) -> Arc<Self> {
-        let (transaction_sender, mut transaction_receiver) = mpsc::channel(100);
-
         let mut raw_engine = Self {
-            transaction_sender,
+            queue_senders: Arc::new(Mutex::new(HashMap::new())),
             rent,
             fee_structure,
             feature_set,
@@ -72,25 +75,38 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         };
         raw_engine.set_sysvars();
         let engine = Arc::new(raw_engine);
-        let engine_clone = Arc::clone(&engine);
-
-        // Spawn a task to process transactions
-        rt::spawn(async move {
-            while let Some((id, raw_tx)) = transaction_receiver.recv().await {
-                match engine_clone.process_and_save_transaction(id, raw_tx) {
-                    Ok(_) => println!("Transaction processed successfully"),
-                    Err(e) => println!("Transaction processing failed: {}", e),
-                }
-            }
-        });
 
         engine
     }
 
     pub async fn queue_transaction(&self, id: Uuid, raw_tx: VersionedTransaction) {
-        println!("Queueing transaction");
-        if let Err(e) = self.transaction_sender.send((id, raw_tx)).await {
-            println!("Failed to queue transaction: {}", e);
+        let mut queue_senders = self.queue_senders.lock().unwrap();
+        match queue_senders.get(&id) {
+            Some(sender) => {
+                println!("Queueing transaction");
+                if let Err(e) = sender.send((id, raw_tx)).await {
+                    println!("Failed to queue transaction: {}", e);
+                }
+            }
+            None => {
+                println!("Creating new transaction processor");
+                let (sender, mut receiver) = mpsc::channel(100);
+                queue_senders.insert(id, sender.clone());
+
+                if let Err(e) = sender.send((id, raw_tx)).await {
+                    println!("Failed to queue transaction: {}", e);
+                }
+
+                let engine = self.clone();
+                rt::spawn(async move {
+                    println!("Starting transaction processor");
+                    while let Some((id, raw_tx)) = receiver.recv().await {
+                        if let Err(e) = engine.process_and_save_transaction(id, raw_tx) {
+                            println!("Failed to process transaction: {}", e);
+                        }
+                    }
+                });
+            }
         }
     }
 
