@@ -1,7 +1,8 @@
 use actix_cors::Cors;
 use actix_multipart::Multipart;
 use actix_web::{
-    get, middleware, post, rt, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
+    delete, get, middleware, post, rt, web, App, Error, HttpRequest, HttpResponse, HttpServer,
+    Responder,
 };
 use actix_ws::AggregatedMessage;
 use dotenv::dotenv;
@@ -98,6 +99,21 @@ async fn get_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Resp
     }
 }
 
+#[delete("/blockchains/{id}")]
+async fn delete_blockchain(
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    path: web::Path<Uuid>,
+) -> impl Responder {
+    let id = path.into_inner();
+    let res = svm.delete_blockchain(id);
+    match res {
+        Ok(_) => HttpResponse::Ok().json(json!({
+            "message": "Blockchain deleted successfully"
+        })),
+        Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+    }
+}
+
 async fn rpc_ws(
     req: HttpRequest,
     path: web::Path<Uuid>,
@@ -186,6 +202,7 @@ async fn main() -> std::io::Result<()> {
             .service(rpc_reqest)
             .service(create_blockchain)
             .service(get_blockchains)
+            .service(delete_blockchain)
             .service(load_program)
     })
     .bind(("0.0.0.0", 8080))?

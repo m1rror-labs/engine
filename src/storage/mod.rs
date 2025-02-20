@@ -59,6 +59,7 @@ pub trait Storage {
 
     fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String>;
     fn get_blockchains(&self) -> Result<Vec<Blockchain>, String>;
+    fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
     fn set_blockchain(&self, blockchain: &Blockchain) -> Result<Uuid, String>;
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String>;
@@ -136,6 +137,16 @@ impl Storage for PgStorage {
             .execute(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(blockchain.id)
+    }
+
+    fn delete_blockchain(&self, id: Uuid) -> Result<(), String> {
+        let mut conn = self.get_connection()?;
+        diesel::delete(
+            crate::schema::blockchain::table.filter(crate::schema::blockchain::id.eq(id)),
+        )
+        .execute(&mut conn)
+        .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String> {

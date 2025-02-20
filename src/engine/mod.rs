@@ -72,6 +72,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
 
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String>;
     fn get_blockchains(&self) -> Result<Vec<Blockchain>, String>;
+    fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
     fn get_transactions_for_address(
@@ -242,6 +243,10 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         load_spl_programs(self, id)?;
 
         Ok(id)
+    }
+
+    fn delete_blockchain(&self, id: Uuid) -> Result<(), String> {
+        self.storage.delete_blockchain(id)
     }
 
     fn get_blockchains(&self) -> Result<Vec<Blockchain>, String> {
@@ -448,14 +453,18 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     }
 
     fn send_transaction(&self, id: Uuid, raw_tx: VersionedTransaction) -> Result<String, String> {
-        // if self.storage.get_transaction(id, tx.signature())?.is_some() {
-        //     return Err("Transaction cannot be replayed".to_string());
-        // };
         let tx_processor = self.transaction_processor.clone();
         let tx_clone = raw_tx.clone();
         if raw_tx.signatures.len() < 1 {
             return Err("Transaction must include signatures".to_string());
         }
+        if self
+            .storage
+            .get_transaction(id, &raw_tx.signatures[0])?
+            .is_some()
+        {
+            return Err("Transaction cannot be replayed".to_string());
+        };
 
         rt::spawn(async move {
             tx_processor.queue_transaction(id, tx_clone).await;
