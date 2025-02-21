@@ -8,7 +8,7 @@ use solana_log_collector::LogCollector;
 use solana_program::last_restart_slot::LastRestartSlot;
 use solana_program_runtime::{
     invoke_context::{EnvironmentConfig, InvokeContext},
-    loaded_programs::{ProgramCacheEntry, ProgramCacheForTxBatch},
+    loaded_programs::{LoadProgramMetrics, ProgramCacheEntry, ProgramCacheForTxBatch},
     sysvar_cache::SysvarCache,
 };
 use solana_sdk::{
@@ -241,7 +241,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
     ) {
         let compute_budget = ComputeBudget::default();
         let blockhash = tx.message().recent_blockhash();
-        //TODO: I dont think I need to do anything here, but if something goes wrong, look here
         let mut program_cache_for_tx_batch = ProgramCacheForTxBatch::default();
         BUILTINS.iter().for_each(|builtint| {
             let loaded_program =
@@ -255,12 +254,37 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             true,
         )
         .unwrap();
-
         let program_runtime_v2 =
             create_program_runtime_environment_v2(&ComputeBudget::default(), true);
-
         program_cache_for_tx_batch.environments.program_runtime_v1 = Arc::new(program_runtime_v1);
         program_cache_for_tx_batch.environments.program_runtime_v2 = Arc::new(program_runtime_v2);
+        let _ = tx.message().program_instructions_iter().map(|(_, i)| {
+            let program_id = tx.message().account_keys()[i.program_id_index as usize];
+            if BUILTINS.iter().any(|b| b.program_id == program_id) {
+                return;
+            }
+            let program_account = accounts_db.get_account(&program_id).unwrap();
+            let program_runtime_v1 = create_program_runtime_environment_v1(
+                &self.feature_set,
+                &ComputeBudget::default(),
+                false,
+                true,
+            )
+            .unwrap();
+            let entry = ProgramCacheEntry::new(
+                program_account.owner(),
+                Arc::new(program_runtime_v1),
+                100,
+                100,
+                program_account.data(),
+                program_account.data().len(),
+                &mut LoadProgramMetrics::default(),
+            )
+            .unwrap(); //TODO: This may panic
+
+            program_cache_for_tx_batch.replenish(program_id, Arc::new(entry));
+        });
+
         let mut accumulated_consume_units = 0;
         let message = tx.message();
         let account_keys = message.account_keys();
