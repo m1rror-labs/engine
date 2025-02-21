@@ -1,8 +1,8 @@
 use actix_multipart::Multipart;
-use actix_web::{delete, get, post, rt, web, Error, HttpRequest, HttpResponse, Responder};
+use actix_web::{get, post, rt, web, Error, HttpRequest, HttpResponse, Responder};
 use actix_ws::AggregatedMessage;
 use futures::StreamExt as _;
-use std::sync::Arc;
+use std::{env, sync::Arc};
 
 use serde_json::json;
 use uuid::Uuid;
@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     engine::{SvmEngine, SVM},
     rpc::{
-        rpc::{handle_request, RpcRequest},
+        rpc::{handle_request, RpcMethod, RpcRequest},
         ws::handle_ws_request,
     },
     storage::PgStorage,
@@ -24,7 +24,9 @@ pub async fn rpc_reqest(
     let id = path.into_inner();
     let res = handle_request(id, req.clone(), &svm);
     println!("{:?}", req.method);
-    println!("{:?}", res);
+    if req.method != RpcMethod::GetAccountInfo {
+        println!("{:?}", res);
+    }
     HttpResponse::Ok().json(res)
 }
 
@@ -118,9 +120,15 @@ pub async fn load_program(
 pub async fn create_blockchain(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
     let id = svm.create_blockchain(None);
     match id {
-        Ok(id) => HttpResponse::Ok().json(json!({
-            "url": format!("https://rpc.mockchain.app/rpc/{}", id.to_string())
-        })),
+        Ok(id) => {
+            let mut base_url = "https://rpc.mockchain.app/rpc/";
+            if env::var("ENV").unwrap_or_else(|_| "prod".to_string()) == "dev" {
+                base_url = "http://localhost:8080/rpc/";
+            }
+            HttpResponse::Ok().json(json!({
+                "url": format!("{}{}",base_url, id.to_string())
+            }))
+        }
         Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
     }
 }

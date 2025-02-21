@@ -30,7 +30,7 @@ use super::{
     simulate_transaction::simulate_transaction,
 };
 
-#[derive(Deserialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum RpcMethod {
     GetAccountInfo,

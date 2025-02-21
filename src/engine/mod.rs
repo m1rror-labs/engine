@@ -178,7 +178,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         loop {
             interval.tick().await;
             let tx = self.get_transaction(id, signature)?;
-            println!("Checking transaction:");
+            println!("Checking transaction: {:?}, {:?}", signature, tx);
             if tx == None {
                 continue;
             }
@@ -601,7 +601,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             data: program_bytes.to_vec(),
             owner: bpf_loader::id(),
             executable: true,
-            rent_epoch: 0,
+            rent_epoch: 100000000,
         };
         self.storage.set_account(id, &program_id, account, None)?;
         Ok(())
@@ -1025,8 +1025,11 @@ impl<'a> AccountsDB<'a> {
     }
 
     fn get_account(&self, pubkey: &Pubkey) -> Option<AccountSharedData> {
-        match self.accounts.get(pubkey).unwrap() {
-            Some(account) => Some(AccountSharedData::from(account.to_owned())),
+        match self.accounts.get(pubkey) {
+            Some(account) => match account {
+                Some(account) => Some(AccountSharedData::from(account.to_owned())),
+                None => None,
+            },
             None => None,
         }
     }

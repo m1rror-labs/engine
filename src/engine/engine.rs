@@ -154,9 +154,14 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         };
         let message = tx.message();
         let account_keys = message.account_keys();
-        let addresses = account_keys.iter().collect();
+        let addresses: Vec<&Pubkey> = account_keys.iter().collect();
         //TODO: I think this works, but maybe not
         let accounts_vec = self.storage.get_accounts(id, &addresses)?;
+        println!(
+            "Processing transaction with {:?} {:?} accounts",
+            addresses.clone(),
+            accounts_vec.clone()
+        );
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -165,7 +170,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let accounts_db = AccountsDB::new(accounts_map.clone());
         let log_collector = LogCollector::new_ref();
         let (tx_result, accumulated_consume_units, context, fee, payer_key) =
-            self.process_transaction(&tx, log_collector.clone(), &accounts_db);
+            self.process_transaction(id, &tx, log_collector.clone(), &accounts_db);
         if context == None {
             if let Err(err) = tx_result {
                 return Err(err.to_string());
@@ -229,6 +234,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
 
     fn process_transaction(
         &self,
+        id: Uuid,
         tx: &SanitizedTransaction,
         log_collector: Rc<RefCell<LogCollector>>,
         accounts_db: &AccountsDB,
@@ -374,7 +380,19 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                     .iter()
                     .any(|(key, _)| key == owner_id)
                 {
-                    let owner_account = accounts_db.get_account(owner_id).unwrap();
+                    let owner_account = match accounts_db.get_account(owner_id) {
+                        Some(account) => account,
+                        None => match self.storage.get_account(id, owner_id) {
+                            Ok(account) => match account {
+                                Some(account) => account.into(),
+                                None => return Err(TransactionError::ProgramAccountNotFound),
+                            },
+                            Err(_) => {
+                                println!("Owner account not found for program {}", owner_id);
+                                return Err(TransactionError::ProgramAccountNotFound);
+                            }
+                        },
+                    };
                     if !native_loader::check_id(owner_account.owner()) {
                         return Err(TransactionError::InvalidProgramForExecution);
                     }
