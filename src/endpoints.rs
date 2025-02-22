@@ -1,5 +1,5 @@
 use actix_multipart::Multipart;
-use actix_web::{get, post, rt, web, Error, HttpRequest, HttpResponse, Responder};
+use actix_web::{delete, get, post, rt, web, Error, HttpRequest, HttpResponse, Responder};
 use actix_ws::AggregatedMessage;
 use futures::StreamExt as _;
 use std::{env, sync::Arc};
@@ -142,6 +142,22 @@ pub async fn get_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl 
         })),
         Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
     }
+}
+
+#[delete("/blockchains")]
+pub async fn delete_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
+    let blockchains = match svm.get_blockchains() {
+        Ok(blockchains) => blockchains,
+        Err(e) => return HttpResponse::InternalServerError().json(e.to_string()),
+    };
+
+    for blockchain in blockchains {
+        svm.delete_blockchain(blockchain.id).unwrap();
+    }
+
+    HttpResponse::Ok().json(json!({
+        "message": "All blockchains deleted successfully"
+    }))
 }
 
 pub async fn delete_blockchain(
