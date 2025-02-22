@@ -43,7 +43,7 @@ pub fn simulate_transaction<T: Storage + Clone + 'static>(
             let return_data_str = BASE64_STANDARD.encode(&res.return_data.data);
             Ok(serde_json::json!({
                 "context": {
-                    "slot": 218,"apiVersion":"1.18.1"
+                    "slot": 218,"apiVersion":"2.1.13"
                   },
                   "value": {
                     "err": res.err,

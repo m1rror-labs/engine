@@ -130,6 +130,10 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         self.set_sysvar(&StakeHistory::default());
     }
 
+    pub fn new_loader(&self, id: Uuid) -> Loader<T> {
+        Loader::new(self.storage.clone(), id, self.sysvar_cache.clone())
+    }
+
     fn process_and_save_transaction(
         &self,
         id: Uuid,

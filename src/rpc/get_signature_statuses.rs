@@ -48,7 +48,7 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
             >>()?;
 
     Ok(serde_json::json!({
-        "context": { "slot": 341197053,"apiVersion":"1.18.1" },
+        "context": { "slot": 341197053,"apiVersion":"2.1.13" },
         "value": txs
         .iter()
         .map(|tx| match tx {

@@ -43,7 +43,7 @@ pub fn get_multiple_accounts<T: Storage + Clone + 'static>(
 
     match svm.get_multiple_accounts(id, &pubkeys) {
         Ok(accounts) => Ok(serde_json::json!({
-            "context": { "apiVersion":"1.18.1", "slot": 341197247 },
+            "context": { "apiVersion":"2.1.13", "slot": 341197247 },
             "value": accounts
             .iter()
             .map(|account| match account {

@@ -60,6 +60,8 @@ pub mod transactions;
 pub trait SVM<T: Storage + Clone + 'static> {
     fn new(storage: T) -> Self;
 
+    fn new_loader(&self, id: Uuid) -> Loader<T>;
+
     fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String>;
     fn get_blockchains(&self) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
@@ -73,6 +75,11 @@ pub trait SVM<T: Storage + Clone + 'static> {
     ) -> Result<Vec<DbTransaction>, String>;
     fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
     fn get_block(&self, id: Uuid, slot_number: &u64) -> Result<Option<Block>, String>;
+    fn get_block_confirmation_status(
+        &self,
+        id: Uuid,
+        slot_number: &u64,
+    ) -> Result<Option<TransactionConfirmationStatus>, String>;
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
     fn get_fee_for_message(&self, message: &SanitizedMessage) -> u64;
     fn get_genesis_hash(&self, id: Uuid) -> Result<Hash, String>;
@@ -156,6 +163,10 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         // });
 
         engine
+    }
+
+    fn new_loader(&self, id: Uuid) -> Loader<T> {
+        self.transaction_processor.new_loader(id)
     }
 
     async fn signature_subscribe(
@@ -265,6 +276,20 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
 
     fn get_block(&self, id: Uuid, slot_number: &u64) -> Result<Option<Block>, String> {
         self.storage.get_block_by_height(id, slot_number.to_owned())
+    }
+
+    fn get_block_confirmation_status(
+        &self,
+        id: Uuid,
+        slot_number: &u64,
+    ) -> Result<Option<TransactionConfirmationStatus>, String> {
+        match self
+            .storage
+            .get_block_created_at(id, slot_number.to_owned())
+        {
+            Ok(created_at) => Ok(Some(tx_confirmation_status(created_at))),
+            Err(e) => Err(e),
+        }
     }
 
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String> {
@@ -782,7 +807,7 @@ pub fn inner_instructions_list_from_instruction_trace(
 }
 
 #[derive(Clone)]
-struct Loader<T: Storage + Clone + 'static> {
+pub struct Loader<T: Storage + Clone + 'static> {
     storage: T,
     id: Uuid,
     sysvar_cache: SysvarCache,
@@ -848,7 +873,7 @@ impl<T: Storage + Clone + 'static> Loader<T> {
     }
 }
 
-fn tx_confirmation_status(time: chrono::DateTime<Utc>) -> TransactionConfirmationStatus {
+pub fn tx_confirmation_status(time: chrono::DateTime<Utc>) -> TransactionConfirmationStatus {
     let now = Utc::now();
     let duration = now - time;
     if duration.num_seconds() > 1 && duration.num_seconds() <= 2 {

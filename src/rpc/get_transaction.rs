@@ -32,7 +32,7 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
     match svm.get_transaction(id, &signature) {
         Ok(transaction) => match transaction {
             Some((transaction, status)) => Ok(serde_json::json!({
-                "context": { "slot": 341197053,"apiVersion":"1.18.1" },
+                "context": { "slot": 341197053,"apiVersion":"2.1.13" },
                 "value": {
                     "slot": status.slot,
                     "transaction": {
@@ -57,7 +57,7 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
                 },
             })),
             None => Ok(serde_json::json!({
-                "context": { "slot": 341197053,"apiVersion":"1.18.1" },
+                "context": { "slot": 341197053,"apiVersion":"2.1.13" },
                 "value": null,
             })),
         },

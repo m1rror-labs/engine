@@ -28,10 +28,21 @@ pub fn get_block_commitment<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.get_block(id, &block_height) {
-        Ok(block) => Ok(serde_json::json!({
-            "value": block,
-        })),
+    match svm.get_block_confirmation_status(id, &block_height) {
+        Ok(confirmation) => match confirmation {
+            Some(_) => Ok(serde_json::json!({
+                //TODO: I can mock this better
+                "commitment": [
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 10, 32
+                  ],
+                  "totalStake": 42
+            })),
+            None => Ok(serde_json::json!({
+                "commitment": [],
+                  "totalStake": 0
+            })),
+        },
         Err(e) => Err(serde_json::json!({
             "code": -32002,
             "message": e,

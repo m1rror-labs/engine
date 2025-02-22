@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use accounts::DbAccount;
 use blocks::{DbBlock, DbBlockchain};
+use chrono::Utc;
 use diesel::dsl::sql;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
@@ -55,6 +56,7 @@ pub trait Storage {
     fn set_block(&self, id: Uuid, block: &Block) -> Result<(), String>;
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String>;
     fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Option<Block>, String>;
+    fn get_block_created_at(&self, id: Uuid, height: u64) -> Result<chrono::DateTime<Utc>, String>;
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
 
     fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String>;
@@ -316,6 +318,16 @@ impl Storage for PgStorage {
             Some(block) => Ok(Some(block.into_block().0)),
             None => Ok(None),
         }
+    }
+
+    fn get_block_created_at(&self, id: Uuid, height: u64) -> Result<chrono::DateTime<Utc>, String> {
+        let mut conn = self.get_connection()?;
+        let block: DbBlock = crate::schema::blocks::table
+            .filter(crate::schema::blocks::block_height.eq(height as i64))
+            .filter(crate::schema::blocks::blockchain.eq(id))
+            .first(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(block.created_at.and_utc())
     }
 
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String> {

@@ -29,14 +29,24 @@ pub fn get_balance<T: Storage + Clone + 'static>(
     };
     let pubkey = parse_pubkey(pubkey_str)?;
 
+    let slot = match svm.get_latest_block(id) {
+        Ok(slot) => slot,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
+
     match svm.get_balance(id, &pubkey) {
         Ok(balance) => match balance {
             Some(balance) => Ok(serde_json::json!({
-                "context": { "slot": 341197053,"apiVersion":"1.18.1" },
+                "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
                 "value": balance,
             })),
             None => Ok(serde_json::json!({
-                "context": { "slot": 341197053,"apiVersion":"1.18.1" },
+                "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
                 "value": 0,
             })),
         },

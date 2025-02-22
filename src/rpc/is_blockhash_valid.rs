@@ -32,12 +32,12 @@ pub fn is_blockhash_valid<T: Storage + Clone + 'static>(
     let (block, res) = svm.is_blockhash_valid(id, &hash)?;
     if res {
         Ok(serde_json::json!({
-            "context": { "slot": block.block_height,"apiVersion":"1.18.1" },
+            "context": { "slot": block.block_height,"apiVersion":"2.1.13" },
             "value": true,
         }))
     } else {
         Ok(serde_json::json!({
-            "context": { "slot": block.block_height,"apiVersion":"1.18.1" },
+            "context": { "slot": block.block_height,"apiVersion":"2.1.13" },
             "value": false,
         }))
     }

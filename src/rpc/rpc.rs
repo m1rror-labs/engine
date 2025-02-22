@@ -1,12 +1,14 @@
-use std::{fmt, str::FromStr};
+use std::{cmp::min, fmt, str::FromStr};
 
 use base64::prelude::*;
 use bincode::Options;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use solana_account_decoder::encode_ui_account;
+use solana_account_decoder_client_types::{UiAccount, UiAccountEncoding, UiDataSliceConfig};
 use solana_sdk::{
-    bs58, hash::Hash, packet::PACKET_DATA_SIZE, pubkey::Pubkey, signature::Signature,
-    transaction::VersionedTransaction,
+    account::ReadableAccount, bs58, hash::Hash, packet::PACKET_DATA_SIZE, pubkey::Pubkey,
+    signature::Signature, transaction::VersionedTransaction,
 };
 use solana_transaction_status_client_types::TransactionBinaryEncoding;
 use std::any::type_name;
@@ -181,7 +183,7 @@ pub fn handle_request<T: Storage + Clone + 'static>(
         RpcMethod::GetBlockHeight => get_block_height(id, svm),
         RpcMethod::GetBlockProduction => Ok(serde_json::json!({
                 "context": {
-                  "slot": 9887,"apiVersion":"1.18.1"
+                  "slot": 9887,"apiVersion":"2.1.13"
                 },
                 "value": {
                   "byIdentity": {
@@ -213,7 +215,7 @@ pub fn handle_request<T: Storage + Clone + 'static>(
                 "warmup": true
         })),
         RpcMethod::GetFeeForMessage => Ok(serde_json::json!({
-            "context": { "slot": 5068,"apiVersion":"1.18.1" }, "value": 5000
+            "context": { "slot": 5068,"apiVersion":"2.1.13" }, "value": 5000
         })),
         RpcMethod::GetFirstAvailableBlock => Ok(serde_json::json!(0)),
         RpcMethod::GetGenesisHash => get_genesis_hash(id, svm),
@@ -275,14 +277,14 @@ pub fn handle_request<T: Storage + Clone + 'static>(
         RpcMethod::GetSlotLeaders => get_slot_leaders(id, &req, svm),
         RpcMethod::GetStakeMinimumDelegation => Err(serde_json::json!({
             "context": {
-                "slot": 501,"apiVersion":"1.18.1"
+                "slot": 501,"apiVersion":"2.1.13"
               },
               "value": 1000000000
         })),
         //TODO: fix this
         RpcMethod::GetSupply => Ok(serde_json::json!({
             "context": {
-                "slot": 1114,"apiVersion":"1.18.1"
+                "slot": 1114,"apiVersion":"2.1.13"
               },
               "value": {
                 "circulating": 16000,
@@ -365,6 +367,27 @@ pub fn parse_pubkey(pubkey_str: &str) -> Result<Pubkey, Value> {
             "code": -32602,
             "message": "Invalid params: unable to parse pubkey",
         })),
+    }
+}
+
+pub fn encode_account<T: ReadableAccount>(
+    account: &T,
+    pubkey: &Pubkey,
+    encoding: UiAccountEncoding,
+    data_slice: Option<UiDataSliceConfig>,
+) -> Result<UiAccount, String> {
+    if (encoding == UiAccountEncoding::Binary || encoding == UiAccountEncoding::Base58)
+        && data_slice
+            .map(|s| min(s.length, account.data().len().saturating_sub(s.offset)))
+            .unwrap_or(account.data().len())
+            > MAX_BASE58_SIZE
+    {
+        let message = format!("Encoded binary (base 58) data should be less than {MAX_BASE58_SIZE} bytes, please use Base64 encoding.");
+        Err(message)
+    } else {
+        Ok(encode_ui_account(
+            pubkey, account, encoding, None, data_slice,
+        ))
     }
 }
 
