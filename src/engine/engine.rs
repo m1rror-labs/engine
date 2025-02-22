@@ -264,7 +264,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         //TODO: I think this works, but maybe not
         let accounts_vec = self.storage.get_accounts(id, &addresses)?;
         println!(
-            "Processing transaction with {:?} {:?} accounts",
+            "simulating transaction with {:?} {:?} accounts",
             addresses.clone(),
             accounts_vec.clone()
         );
@@ -356,7 +356,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             create_program_runtime_environment_v2(&ComputeBudget::default(), true);
         program_cache_for_tx_batch.environments.program_runtime_v1 = Arc::new(program_runtime_v1);
         program_cache_for_tx_batch.environments.program_runtime_v2 = Arc::new(program_runtime_v2);
-        let _ = tx.message().program_instructions_iter().map(|(_, i)| {
+        tx.message().instructions().iter().for_each(|i| {
             let program_id = tx.message().account_keys()[i.program_id_index as usize];
             if BUILTINS.iter().any(|b| b.program_id == program_id) {
                 return;
