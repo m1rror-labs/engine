@@ -54,7 +54,7 @@ pub fn get_multiple_accounts<T: Storage + Clone + 'static>(
                         "executable": account.executable,
                         "lamports": account.lamports,
                         "owner": account.owner.to_string(),
-                        "rentEpoch":1844674407,
+                        "rentEpoch": account.rent_epoch,
                         "space": account.data.len(),
                     })
                 },

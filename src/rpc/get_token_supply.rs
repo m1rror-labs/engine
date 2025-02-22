@@ -27,12 +27,30 @@ pub fn get_token_supply<T: Storage + Clone + 'static>(
             }));
         }
     };
-    let pubkey = parse_pubkey(pubkey_str)?;
+    let pubkey = match parse_pubkey(pubkey_str) {
+        Ok(pubkey) => pubkey,
+        Err(e) => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": e,
+            }));
+        }
+    };
+
+    let slot = match svm.get_latest_block(id) {
+        Ok(slot) => slot,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
 
     match svm.get_token_supply(id, &pubkey) {
         Ok(amount) => match amount {
             Some(amount) => Ok(serde_json::json!({
-                "context": { "slot": 341197053,"apiVersion":"2.1.13" },
+                "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
                 "value":  amount,
             })),
             None => Err(serde_json::json!({

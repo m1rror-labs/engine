@@ -27,7 +27,15 @@ pub fn get_token_account_balance<T: Storage + Clone + 'static>(
             }));
         }
     };
-    let pubkey = parse_pubkey(pubkey_str)?;
+    let pubkey = match parse_pubkey(pubkey_str) {
+        Ok(pubkey) => pubkey,
+        Err(e) => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": e,
+            }));
+        }
+    };
 
     match svm.get_token_account_balance(id, &pubkey) {
         Ok(amount) => match amount {

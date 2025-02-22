@@ -29,7 +29,25 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
             }));
         }
     };
-    let pubkey = parse_pubkey(pubkey_str)?;
+    let pubkey = match parse_pubkey(pubkey_str) {
+        Ok(pubkey) => pubkey,
+        Err(e) => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": e,
+            }));
+        }
+    };
+
+    let slot = match svm.get_latest_block(id) {
+        Ok(slot) => slot,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
 
     match svm.get_token_accounts_by_owner(id, &pubkey) {
         Ok(accounts) => {
@@ -87,7 +105,7 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
             };
 
             Ok(serde_json::json!({
-                "context": { "apiVersion":"2.1.13", "slot": 341197933 },
+                "context": { "apiVersion":"2.1.13", "slot": slot.block_height },
                 "value": vals}))
         }
         Err(e) => Err(serde_json::json!({

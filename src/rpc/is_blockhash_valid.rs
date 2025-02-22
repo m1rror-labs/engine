@@ -27,9 +27,25 @@ pub fn is_blockhash_valid<T: Storage + Clone + 'static>(
             }));
         }
     };
-    let hash = parse_hash(hash_str)?;
+    let hash = match parse_hash(hash_str) {
+        Ok(hash) => hash,
+        Err(e) => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": e,
+            }));
+        }
+    };
 
-    let (block, res) = svm.is_blockhash_valid(id, &hash)?;
+    let (block, res) = match svm.is_blockhash_valid(id, &hash) {
+        Ok((block, res)) => (block, res),
+        Err(e) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": e,
+            }));
+        }
+    };
     if res {
         Ok(serde_json::json!({
             "context": { "slot": block.block_height,"apiVersion":"2.1.13" },

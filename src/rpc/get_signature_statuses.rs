@@ -47,8 +47,18 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
                 String,
             >>()?;
 
+    let slot = match svm.get_latest_block(id) {
+        Ok(slot) => slot,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
+
     Ok(serde_json::json!({
-        "context": { "slot": 341197053,"apiVersion":"2.1.13" },
+        "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
         "value": txs
         .iter()
         .map(|tx| match tx {

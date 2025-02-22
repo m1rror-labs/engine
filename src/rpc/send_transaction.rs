@@ -59,7 +59,15 @@ pub fn send_transaction<T: Storage + Clone + 'static>(
         format!("unsupported encoding: {tx_encoding}. Supported encodings: base58, base64")
     })?;
     let (_, unsanitized_tx) =
-        decode_and_deserialize::<VersionedTransaction>(tx_data.to_owned(), binary_encoding)?;
+        match decode_and_deserialize::<VersionedTransaction>(tx_data.to_owned(), binary_encoding) {
+            Ok(tx) => tx,
+            Err(e) => {
+                return Err(serde_json::json!({
+                    "code": -32602,
+                    "message": e,
+                }));
+            }
+        };
 
     let _ = match unsanitized_tx.sanitize() {
         Ok(tx) => tx,

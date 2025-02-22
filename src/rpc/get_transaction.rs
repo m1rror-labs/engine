@@ -27,12 +27,30 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
             }));
         }
     };
-    let signature = parse_signature(sig_str)?;
+    let signature = match parse_signature(sig_str) {
+        Ok(signature) => signature,
+        Err(e) => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": e,
+            }));
+        }
+    };
+
+    let slot = match svm.get_latest_block(id) {
+        Ok(slot) => slot,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
 
     match svm.get_transaction(id, &signature) {
         Ok(transaction) => match transaction {
             Some((transaction, status)) => Ok(serde_json::json!({
-                "context": { "slot": 341197053,"apiVersion":"2.1.13" },
+                "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
                 "value": {
                     "slot": status.slot,
                     "transaction": {
@@ -57,7 +75,7 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
                 },
             })),
             None => Ok(serde_json::json!({
-                "context": { "slot": 341197053,"apiVersion":"2.1.13" },
+                "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
                 "value": null,
             })),
         },

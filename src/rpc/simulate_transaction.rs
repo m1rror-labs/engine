@@ -38,12 +38,22 @@ pub fn simulate_transaction<T: Storage + Clone + 'static>(
         }
     };
 
+    let slot = match svm.get_latest_block(id) {
+        Ok(slot) => slot,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
+
     match svm.simulate_transaction(id, tx) {
         Ok(res) => {
             let return_data_str = BASE64_STANDARD.encode(&res.return_data.data);
             Ok(serde_json::json!({
                 "context": {
-                    "slot": 218,"apiVersion":"2.1.13"
+                    "slot": slot.block_height,"apiVersion":"2.1.13"
                   },
                   "value": {
                     "err": res.err,

@@ -27,7 +27,15 @@ pub fn request_airdrop<T: Storage + Clone + 'static>(
             }));
         }
     };
-    let pubkey = parse_pubkey(pubkey_str)?;
+    let pubkey = match parse_pubkey(pubkey_str) {
+        Ok(pubkey) => pubkey,
+        Err(e) => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": e,
+            }));
+        }
+    };
 
     let lamports = match req
         .params
