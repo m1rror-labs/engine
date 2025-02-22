@@ -131,6 +131,17 @@ pub async fn create_blockchain(
         }
     };
 
+    let existing_blockchains = match svm.get_blockchains(team_id) {
+        Ok(blockchains) => blockchains,
+        Err(e) => return HttpResponse::InternalServerError().json(e.to_string()),
+    };
+
+    if existing_blockchains.len() >= 5 {
+        return HttpResponse::BadRequest().json(json!({
+            "message": "You can only create 5 blockchains per team"
+        }));
+    }
+
     let id = svm.create_blockchain(team_id, None);
     match id {
         Ok(id) => {
