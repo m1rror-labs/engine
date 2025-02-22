@@ -1,3 +1,4 @@
+use bigdecimal::ToPrimitive;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -37,7 +38,7 @@ pub fn get_signatures_for_address<T: Storage + Clone + 'static>(
                     "err": null,
                     "memo": null,
                     "signature": tx.signature,
-                    "slot": tx.slot,
+                    "slot": tx.slot.to_u64().unwrap(),
                     "blockTime": null
                 })
             })

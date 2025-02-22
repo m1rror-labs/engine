@@ -22,9 +22,9 @@ table! {
         blockchain -> Uuid,
         blockhash -> Bytea,
         previous_blockhash -> Bytea,
-        parent_slot -> BigInt,
-        block_height -> BigInt,
-        slot -> BigInt,
+        parent_slot -> Numeric,
+        block_height -> Numeric,
+        slot -> Numeric,
     }
 }
 
@@ -43,7 +43,7 @@ table! {
         signature -> Text,
         version -> Text,
         recent_blockhash -> Bytea,
-        slot -> BigInt,
+        slot -> Numeric,
         blockchain -> Uuid,
     }
 }
@@ -101,10 +101,10 @@ table! {
         created_at -> Timestamp,
         transaction_signature -> Text,
         err -> Nullable<Text>,
-        compute_units_consumed -> BigInt,
-        fee -> BigInt,
-        pre_balances -> Array<BigInt>,
-        post_balances -> Array<BigInt>,
+        compute_units_consumed -> Numeric,
+        fee -> Numeric,
+        pre_balances -> Array<Numeric>,
+        post_balances -> Array<Numeric>,
     }
 }
 

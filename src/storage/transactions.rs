@@ -1,3 +1,4 @@
+use bigdecimal::BigDecimal;
 use diesel::prelude::*;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::{
@@ -18,7 +19,7 @@ pub struct DbTransaction {
     pub signature: String,
     pub version: String,
     pub recent_blockhash: Vec<u8>,
-    pub slot: i64,
+    pub slot: BigDecimal,
     pub blockchain: Uuid,
 }
 
@@ -30,7 +31,7 @@ impl DbTransaction {
             signature: meta.tx.signature().to_string(),
             version: version_to_string(&meta.tx.to_versioned_transaction().version()),
             recent_blockhash: meta.tx.message().recent_blockhash().to_bytes().to_vec(),
-            slot: meta.current_block.block_height as i64,
+            slot: meta.current_block.block_height.into(),
             blockchain,
         }
     }
@@ -179,10 +180,10 @@ pub struct DbTransactionMeta {
     pub created_at: chrono::NaiveDateTime,
     pub transaction_signature: String,
     pub err: Option<String>,
-    pub compute_units_consumed: i64,
-    pub fee: i64,
-    pub pre_balances: Vec<i64>,
-    pub post_balances: Vec<i64>,
+    pub compute_units_consumed: BigDecimal,
+    pub fee: BigDecimal,
+    pub pre_balances: Vec<BigDecimal>,
+    pub post_balances: Vec<BigDecimal>,
 }
 
 impl DbTransactionMeta {
@@ -192,17 +193,17 @@ impl DbTransactionMeta {
             created_at: chrono::Utc::now().naive_utc(),
             transaction_signature: meta.tx.signature().to_string(),
             err: meta.err.as_ref().map(|e| e.to_string()),
-            compute_units_consumed: meta.compute_units_consumed as i64,
-            fee: meta.tx.message().recent_blockhash().to_bytes()[0] as i64,
+            compute_units_consumed: meta.compute_units_consumed.into(),
+            fee: meta.tx.message().recent_blockhash().to_bytes()[0].into(),
             pre_balances: meta
                 .pre_accounts
                 .iter()
-                .map(|(_, a)| a.lamports() as i64)
+                .map(|(_, a)| a.lamports().into())
                 .collect(),
             post_balances: meta
                 .post_accounts
                 .iter()
-                .map(|(_, a)| a.lamports() as i64)
+                .map(|(_, a)| a.lamports().into())
                 .collect(),
         }
     }

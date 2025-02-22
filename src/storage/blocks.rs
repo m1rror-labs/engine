@@ -1,3 +1,4 @@
+use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::prelude::*;
 use solana_sdk::{hash::Hash, signature::Keypair};
 use uuid::Uuid;
@@ -32,9 +33,9 @@ pub struct DbBlock {
     pub blockchain: Uuid,
     pub blockhash: Vec<u8>,
     pub previous_blockhash: Vec<u8>,
-    pub parent_slot: i64,
-    pub block_height: i64,
-    pub slot: i64,
+    pub parent_slot: BigDecimal,
+    pub block_height: BigDecimal,
+    pub slot: BigDecimal,
 }
 
 impl DbBlock {
@@ -45,9 +46,9 @@ impl DbBlock {
             blockchain,
             blockhash: block.blockhash.to_bytes().to_vec(),
             previous_blockhash: block.previous_blockhash.to_bytes().to_vec(),
-            parent_slot: block.parent_slot as i64,
-            block_height: block.block_height as i64,
-            slot: block.block_height as i64,
+            parent_slot: block.parent_slot.into(),
+            block_height: block.block_height.into(),
+            slot: block.block_height.into(),
         }
     }
 
@@ -58,9 +59,9 @@ impl DbBlock {
                 previous_blockhash: Hash::new_from_array(
                     self.previous_blockhash.as_slice().try_into().unwrap(),
                 ),
-                block_height: self.block_height as u64,
+                block_height: self.block_height.to_u64().unwrap(),
                 block_time: self.created_at.and_utc().timestamp() as u64,
-                parent_slot: self.parent_slot as u64,
+                parent_slot: self.parent_slot.to_u64().unwrap(),
                 transactions: vec![],
             },
             self.blockchain,

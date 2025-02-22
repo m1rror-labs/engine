@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use accounts::DbAccount;
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use blocks::{DbBlock, DbBlockchain};
 use chrono::Utc;
 use diesel::dsl::sql;
@@ -310,7 +310,7 @@ impl Storage for PgStorage {
     fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Option<Block>, String> {
         let mut conn = self.get_connection()?;
         let block: Option<DbBlock> = crate::schema::blocks::table
-            .filter(crate::schema::blocks::block_height.eq(height as i64))
+            .filter(crate::schema::blocks::block_height.eq::<BigDecimal>(height.into()))
             .filter(crate::schema::blocks::blockchain.eq(id))
             .first(&mut conn)
             .optional()
@@ -324,7 +324,7 @@ impl Storage for PgStorage {
     fn get_block_created_at(&self, id: Uuid, height: u64) -> Result<chrono::DateTime<Utc>, String> {
         let mut conn = self.get_connection()?;
         let block: DbBlock = crate::schema::blocks::table
-            .filter(crate::schema::blocks::block_height.eq(height as i64))
+            .filter(crate::schema::blocks::block_height.eq::<BigDecimal>(height.into()))
             .filter(crate::schema::blocks::blockchain.eq(id))
             .first(&mut conn)
             .map_err(|e| e.to_string())?;
@@ -501,7 +501,7 @@ impl Storage for PgStorage {
                     .collect(),
                 message: solana_sdk::message::Message::new(&instructions, None),
             },
-            db_tx.slot as u64,
+            db_tx.slot.to_u64().unwrap(),
             match tx_meta.to_owned().err {
                 Some(e) => {
                     let deserialized_error: Result<TransactionError, _> = serde_json::from_str(&e);
