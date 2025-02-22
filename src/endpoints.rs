@@ -222,7 +222,7 @@ fn valid_api_key(
 ) -> bool {
     let api_key = http_req
         .headers()
-        .get("api_key")
+        .get("api-key")
         .and_then(|header_value| header_value.to_str().ok())
         .unwrap_or("");
     let api_key = match Uuid::parse_str(api_key) {
@@ -249,7 +249,7 @@ fn get_team_id(
 ) -> Result<Uuid, String> {
     let api_key = http_req
         .headers()
-        .get("api_key")
+        .get("api-key")
         .and_then(|header_value| header_value.to_str().ok())
         .unwrap_or("");
 
