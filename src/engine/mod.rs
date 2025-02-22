@@ -5,14 +5,8 @@ use chrono::{DateTime, Utc};
 use engine::TransactionProcessor;
 use sha2::{Digest, Sha256};
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
-use solana_compute_budget::compute_budget::ComputeBudget;
-use solana_log_collector::LogCollector;
 use solana_program::{last_restart_slot::LastRestartSlot, pubkey};
-use solana_program_runtime::{
-    invoke_context::{EnvironmentConfig, InvokeContext},
-    loaded_programs::{ProgramCacheEntry, ProgramCacheForTxBatch},
-    sysvar_cache::SysvarCache,
-};
+use solana_program_runtime::sysvar_cache::SysvarCache;
 use solana_sdk::{
     account::{Account, AccountSharedData, ReadableAccount, WritableAccount},
     account_utils::StateMut,
@@ -36,24 +30,20 @@ use solana_sdk::{
     program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
-    reserved_account_keys::ReservedAccountKeys,
     signature::{Keypair, Signature},
     signer::Signer,
     slot_history::SlotHistory,
     stake_history::StakeHistory,
     system_instruction, system_program,
     sysvar::{self, instructions::construct_instructions_data, Sysvar, SysvarId},
-    transaction::{
-        MessageHash, SanitizedTransaction, Transaction, TransactionError, VersionedTransaction,
-    },
+    transaction::{SanitizedTransaction, Transaction, TransactionError, VersionedTransaction},
     transaction_context::{ExecutionRecord, IndexOfAccount, TransactionContext},
 };
-use solana_svm::message_processor::MessageProcessor;
-use solana_timings::ExecuteTimings;
+
 use spl::load_spl_programs;
 use spl_token::state::Account as SplAccount;
 use spl_token::state::Mint;
-use std::{cell::RefCell, collections::HashMap, rc::Rc, str::FromStr, sync::Arc, time::Duration}; // Add this import at the top of your file
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration}; // Add this import at the top of your file
 use tokens::TokenAmount;
 use transactions::TransactionMetadata;
 use uuid::Uuid;
@@ -478,92 +468,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         id: Uuid,
         raw_tx: VersionedTransaction,
     ) -> Result<TransactionMetadata, String> {
-        let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
-
-        let tx = match SanitizedTransaction::try_create(
-            raw_tx,
-            MessageHash::Compute,
-            Some(false),
-            address_loader,
-            &ReservedAccountKeys::empty_key_set(),
-        ) {
-            Ok(tx) => tx,
-            Err(e) => return Err(e.to_string()),
-        };
-        let (_, valid_blockhash) = self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
-        if !valid_blockhash {
-            return Err("Blockhash is not valid".to_string());
-        };
-        if self.storage.get_transaction(id, tx.signature())?.is_some() {
-            return Err("Transaction cannot be replayed".to_string());
-        };
-
-        let message = tx.message();
-        let account_keys = message.account_keys();
-        let addresses = account_keys.iter().collect();
-        //TODO: I think this works, but maybe not
-        let accounts_vec = self.storage.get_accounts(id, &addresses)?;
-        let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
-            .iter()
-            .cloned()
-            .zip(accounts_vec.into_iter())
-            .collect();
-        let accounts_db = AccountsDB::new(accounts_map.clone());
-        let log_collector = LogCollector::new_ref();
-        let (tx_result, accumulated_consume_units, context, fee, payer_key) =
-            self.process_transaction(&tx, log_collector.clone(), &accounts_db);
-        if context == None {
-            if let Err(err) = tx_result {
-                return Err(err.to_string());
-            } else {
-                return Err("Context is None".to_string());
-            }
-        }
-        //Decrement account if tx failed and payer is not None
-        if tx_result.is_err() && payer_key.is_some() {
-            let payer_key = payer_key.unwrap();
-            let payer_account = accounts_db.get_account(&payer_key).unwrap();
-            payer_account.to_owned().checked_sub_lamports(fee).unwrap();
-            self.storage
-                .set_account_lamports(id, &payer_key, payer_account.lamports())?;
-        }
-
-        let context = context.unwrap();
-        let (signature, return_data, inner_instructions, post_accounts) =
-            execute_tx_helper(tx.clone(), context.clone());
-        let Ok(logs) = Rc::try_unwrap(log_collector).map(|lc| lc.into_inner().messages) else {
-            unreachable!("Log collector should not be used after send_transaction returns")
-        };
-
-        let current_block = self.current_block(id)?;
-        let meta = TransactionMetadata {
-            signature,
-            err: tx_result.err(),
-            logs,
-            inner_instructions,
-            compute_units_consumed: accumulated_consume_units,
-            return_data,
-            tx: tx.clone(),
-            current_block,
-            //TODO: This may be wrong
-            pre_accounts: accounts_db
-                .accounts
-                .iter()
-                .map(|(k, v)| {
-                    if let Some(account) = v {
-                        (
-                            k.to_owned().to_owned(),
-                            AccountSharedData::from(account.to_owned()),
-                        )
-                    } else {
-                        (k.to_owned().to_owned(), AccountSharedData::default())
-                    }
-                })
-                .collect(),
-            post_accounts: post_accounts.clone(),
-        };
-
-        Ok(meta)
+        self.transaction_processor.simulate_transaction(id, raw_tx)
     }
 
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
@@ -628,243 +533,6 @@ impl<T: Storage + Clone + 'static> SvmEngine<T> {
         self.set_sysvar(&Rent::default());
         self.set_sysvar(&SlotHistory::default());
         self.set_sysvar(&StakeHistory::default());
-    }
-
-    fn create_transaction_context(
-        &self,
-        compute_budget: ComputeBudget,
-        accounts: Vec<(Pubkey, AccountSharedData)>,
-    ) -> TransactionContext {
-        TransactionContext::new(
-            accounts,
-            self.rent.clone(),
-            compute_budget.max_instruction_stack_depth,
-            compute_budget.max_instruction_trace_length,
-        )
-    }
-
-    fn check_accounts_rent(
-        &self,
-        tx: &SanitizedTransaction,
-        context: &TransactionContext,
-        accounts_db: &AccountsDB,
-    ) -> Result<(), TransactionError> {
-        for index in 0..tx.message().account_keys().len() {
-            if tx.message().is_writable(index) {
-                let account = context
-                    .get_account_at_index(index as IndexOfAccount)
-                    .map_err(|err| {
-                        println!("Error getting account at index: {:?}", err);
-                        TransactionError::InstructionError(index as u8, err)
-                    })?
-                    .borrow();
-                let pubkey = context
-                    .get_key_of_account_at_index(index as IndexOfAccount)
-                    .map_err(|err| {
-                        println!("Error getting key of account at index: {:?}", err);
-                        TransactionError::InstructionError(index as u8, err)
-                    })?;
-                let rent = self.sysvar_cache.get_rent().unwrap_or_default();
-
-                if !account.data().is_empty() {
-                    let post_rent_state = RentState::from_account(&account, &rent);
-                    let pre_rent_state = RentState::from_account(
-                        &accounts_db.get_account(pubkey).unwrap_or_default(),
-                        &rent,
-                    );
-
-                    if !post_rent_state.transition_allowed_from(&pre_rent_state) {
-                        return Err(TransactionError::InsufficientFundsForRent {
-                            account_index: index as u8,
-                        });
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn process_transaction(
-        &self,
-        tx: &SanitizedTransaction,
-        log_collector: Rc<RefCell<LogCollector>>,
-        accounts_db: &AccountsDB,
-    ) -> (
-        Result<(), TransactionError>,
-        u64,
-        Option<TransactionContext>,
-        u64,
-        Option<Pubkey>,
-    ) {
-        let compute_budget = ComputeBudget::default();
-        let blockhash = tx.message().recent_blockhash();
-        //TODO: I dont think I need to do anything here, but if something goes wrong, look here
-        let mut program_cache_for_tx_batch = ProgramCacheForTxBatch::default();
-        BUILTINS.iter().for_each(|builtint| {
-            let loaded_program =
-                ProgramCacheEntry::new_builtin(0, builtint.name.len(), builtint.entrypoint);
-            program_cache_for_tx_batch.replenish(builtint.program_id, Arc::new(loaded_program));
-        });
-        let mut accumulated_consume_units = 0;
-        let message = tx.message();
-        let account_keys = message.account_keys();
-        let fee = solana_fee::calculate_fee(
-            message,
-            false,
-            self.fee_structure.lamports_per_signature,
-            0,
-            self.feature_set
-                .is_active(&remove_rounding_in_fee_calculation::id()),
-        );
-        let mut validated_fee_payer = false;
-        let mut payer_key = None;
-        let maybe_accounts = account_keys
-            .iter()
-            .enumerate()
-            .map(|(i, key)| {
-                let mut account_found = true;
-                let account = if solana_sdk::sysvar::instructions::check_id(key) {
-                    construct_instructions_account(message)
-                } else {
-                    let mut account = accounts_db.get_account(key).unwrap_or_else(|| {
-                        account_found = false;
-                        let mut default_account = AccountSharedData::default();
-                        default_account.set_rent_epoch(0);
-                        default_account
-                    });
-                    if !validated_fee_payer
-                        && (!message.is_invoked(i) || message.is_instruction_account(i))
-                    {
-                        validate_fee_payer(
-                            key,
-                            &mut account,
-                            i as IndexOfAccount,
-                            &self.sysvar_cache.get_rent().unwrap(),
-                            fee,
-                        )?;
-                        validated_fee_payer = true;
-                        payer_key = Some(*key);
-                    }
-                    account
-                };
-
-                Ok((*key, account))
-            })
-            .collect::<solana_sdk::transaction::Result<Vec<_>>>();
-        let mut accounts = match maybe_accounts {
-            Ok(accs) => accs,
-            Err(e) => {
-                return (Err(e), accumulated_consume_units, None, fee, payer_key);
-            }
-        };
-        if !validated_fee_payer {
-            return (
-                Err(TransactionError::AccountNotFound),
-                accumulated_consume_units,
-                None,
-                fee,
-                payer_key,
-            );
-        }
-        let builtins_start_index = accounts.len();
-        let maybe_program_indices = tx
-            .message()
-            .instructions()
-            .iter()
-            .map(|c| {
-                let mut account_indices: Vec<u16> = Vec::with_capacity(2);
-                let program_index = c.program_id_index as usize;
-                // This may never error, because the transaction is sanitized
-                let (program_id, program_account) = accounts.get(program_index).unwrap();
-                if native_loader::check_id(program_id) {
-                    return Ok(account_indices);
-                }
-                if !program_account.executable() {
-                    return Err(TransactionError::InvalidProgramForExecution);
-                }
-                account_indices.insert(0, program_index as IndexOfAccount);
-
-                let owner_id = program_account.owner();
-                if native_loader::check_id(owner_id) {
-                    return Ok(account_indices);
-                }
-                if !accounts
-                    .get(builtins_start_index..)
-                    .ok_or(TransactionError::ProgramAccountNotFound)?
-                    .iter()
-                    .any(|(key, _)| key == owner_id)
-                {
-                    let owner_account = accounts_db.get_account(owner_id).unwrap();
-                    if !native_loader::check_id(owner_account.owner()) {
-                        return Err(TransactionError::InvalidProgramForExecution);
-                    }
-                    if !owner_account.executable() {
-                        return Err(TransactionError::InvalidProgramForExecution);
-                    }
-                    accounts.push((*owner_id, owner_account.into()));
-                }
-                Ok(account_indices)
-            })
-            .collect::<Result<Vec<Vec<u16>>, TransactionError>>();
-        match maybe_program_indices {
-            Ok(program_indices) => {
-                let mut context = self.create_transaction_context(compute_budget, accounts);
-                let mut tx_result = MessageProcessor::process_message(
-                    tx.message(),
-                    &program_indices,
-                    &mut InvokeContext::new(
-                        &mut context,
-                        &mut program_cache_for_tx_batch,
-                        EnvironmentConfig::new(
-                            *blockhash,
-                            None,
-                            None,
-                            Arc::new(self.feature_set.clone().into()),
-                            0,
-                            &self.sysvar_cache,
-                        ),
-                        Some(log_collector),
-                        compute_budget,
-                    ),
-                    &mut ExecuteTimings::default(),
-                    &mut accumulated_consume_units,
-                )
-                .map(|_| ());
-                println!("Transaction result: {:?}", tx_result);
-                if let Err(err) = self.check_accounts_rent(tx, &context, accounts_db) {
-                    tx_result = Err(err);
-                };
-
-                (
-                    tx_result,
-                    accumulated_consume_units,
-                    Some(context),
-                    fee,
-                    payer_key,
-                )
-            }
-            Err(e) => (Err(e), accumulated_consume_units, None, fee, payer_key),
-        }
-    }
-
-    pub fn progress_block(&self, id: Uuid) -> Result<(), String> {
-        let latest_block = self.storage.get_latest_block(id)?;
-
-        let mut hasher = Sha256::new();
-        hasher.update(latest_block.blockhash.as_ref());
-        let hash_array = hasher.finalize();
-        let current_blockhash = Hash::new_from_array(hash_array.into());
-        let next_block = Block {
-            blockhash: current_blockhash,
-            block_time: latest_block.block_time + 60,
-            previous_blockhash: latest_block.blockhash,
-            block_height: latest_block.block_height + 1,
-            parent_slot: latest_block.block_height,
-            transactions: vec![],
-        };
-
-        self.storage.set_block(id, &next_block)?;
-        Ok(())
     }
 }
 

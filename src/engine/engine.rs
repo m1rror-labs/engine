@@ -232,6 +232,94 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         Ok(())
     }
 
+    pub fn simulate_transaction(
+        &self,
+        id: Uuid,
+        raw_tx: VersionedTransaction,
+    ) -> Result<TransactionMetadata, String> {
+        let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
+
+        let tx = match SanitizedTransaction::try_create(
+            raw_tx,
+            MessageHash::Compute,
+            Some(false),
+            address_loader,
+            &ReservedAccountKeys::empty_key_set(),
+        ) {
+            Ok(tx) => tx,
+            Err(e) => return Err(e.to_string()),
+        };
+        let (current_block, valid_blockhash) =
+            self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
+        if !valid_blockhash {
+            return Err("Blockhash is not valid".to_string());
+        };
+        let message = tx.message();
+        let account_keys = message.account_keys();
+        let addresses: Vec<&Pubkey> = account_keys.iter().collect();
+        //TODO: I think this works, but maybe not
+        let accounts_vec = self.storage.get_accounts(id, &addresses)?;
+        println!(
+            "Processing transaction with {:?} {:?} accounts",
+            addresses.clone(),
+            accounts_vec.clone()
+        );
+        let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
+            .iter()
+            .cloned()
+            .zip(accounts_vec.into_iter())
+            .collect();
+        let accounts_db = AccountsDB::new(accounts_map.clone());
+        let log_collector = LogCollector::new_ref();
+        let (tx_result, accumulated_consume_units, context, _, _) =
+            self.process_transaction(id, &tx, log_collector.clone(), &accounts_db);
+        if context == None {
+            if let Err(err) = tx_result {
+                return Err(err.to_string());
+            } else {
+                return Err("Context is None".to_string());
+            }
+        }
+        if tx_result.is_err() {
+            return Err(tx_result.unwrap_err().to_string());
+        }
+        let context = context.unwrap();
+        let (signature, return_data, inner_instructions, post_accounts) =
+            execute_tx_helper(tx.clone(), context);
+        let Ok(logs) = Rc::try_unwrap(log_collector).map(|lc| lc.into_inner().messages) else {
+            unreachable!("Log collector should not be used after send_transaction returns")
+        };
+
+        let meta = TransactionMetadata {
+            signature,
+            err: tx_result.err(),
+            logs,
+            inner_instructions,
+            compute_units_consumed: accumulated_consume_units,
+            return_data,
+            tx: tx.clone(),
+            current_block,
+            //TODO: This may be wrong
+            pre_accounts: accounts_db
+                .accounts
+                .iter()
+                .map(|(k, v)| {
+                    if let Some(account) = v {
+                        (
+                            k.to_owned().to_owned(),
+                            AccountSharedData::from(account.to_owned()),
+                        )
+                    } else {
+                        (k.to_owned().to_owned(), AccountSharedData::default())
+                    }
+                })
+                .collect(),
+            post_accounts: post_accounts.clone(),
+        };
+
+        Ok(meta)
+    }
+
     fn process_transaction(
         &self,
         id: Uuid,
