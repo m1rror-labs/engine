@@ -20,14 +20,8 @@ pub async fn rpc_reqest(
     req: web::Json<RpcRequest>,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
-    http_req: HttpRequest,
 ) -> impl Responder {
     let id = path.into_inner();
-    if !valid_api_key(id, svm.clone(), http_req) {
-        return HttpResponse::Unauthorized().json(json!({
-            "message": "Invalid API key"
-        }));
-    }
 
     let res = handle_request(id, req.clone(), &svm);
     println!("{:?}", req.method);
@@ -41,7 +35,6 @@ pub async fn rpc_ws(
     req: HttpRequest,
     path: web::Path<Uuid>,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
-    http_req: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse, Error> {
     let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
@@ -49,11 +42,6 @@ pub async fn rpc_ws(
         .aggregate_continuations()
         .max_continuation_size(2_usize.pow(20));
     let id = path.into_inner();
-    if !valid_api_key(id, svm.clone(), http_req) {
-        return Ok(HttpResponse::Unauthorized().json(json!({
-            "message": "Invalid API key"
-        })));
-    }
     rt::spawn(async move {
         while let Some(msg) = stream.next().await {
             match msg {
@@ -90,14 +78,8 @@ pub async fn load_program(
     mut payload: Multipart,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
-    http_req: HttpRequest,
 ) -> impl Responder {
     let id = path.into_inner();
-    if !valid_api_key(id, svm.clone(), http_req) {
-        return HttpResponse::Unauthorized().json(json!({
-            "message": "Invalid API key"
-        }));
-    }
     let mut program_data = Vec::new();
     let mut program_id_str = String::new();
 
