@@ -446,7 +446,10 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     ) -> Result<Option<(Transaction, TransactionStatus)>, String> {
         let res = match self.storage.get_transaction(id, signature) {
             Ok(res) => res,
-            Err(_) => return Ok(None),
+            Err(e) => {
+                println!("Error getting transaction: {:?}", e);
+                return Ok(None);
+            }
         };
         if res == None {
             return Ok(None);

@@ -182,8 +182,8 @@ pub struct DbTransactionMeta {
     pub err: Option<String>,
     pub compute_units_consumed: BigDecimal,
     pub fee: BigDecimal,
-    pub pre_balances: Vec<BigDecimal>,
-    pub post_balances: Vec<BigDecimal>,
+    pub pre_balances: Vec<i64>,
+    pub post_balances: Vec<i64>,
 }
 
 impl DbTransactionMeta {
@@ -198,12 +198,12 @@ impl DbTransactionMeta {
             pre_balances: meta
                 .pre_accounts
                 .iter()
-                .map(|(_, a)| a.lamports().into())
+                .map(|(_, a)| a.lamports() as i64)
                 .collect(),
             post_balances: meta
                 .post_accounts
                 .iter()
-                .map(|(_, a)| a.lamports().into())
+                .map(|(_, a)| a.lamports() as i64)
                 .collect(),
         }
     }

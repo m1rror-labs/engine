@@ -103,8 +103,8 @@ table! {
         err -> Nullable<Text>,
         compute_units_consumed -> Numeric,
         fee -> Numeric,
-        pre_balances -> Array<Numeric>,
-        post_balances -> Array<Numeric>,
+        pre_balances -> Array<BigInt>,
+        post_balances -> Array<BigInt>,
     }
 }
 
