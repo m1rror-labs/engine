@@ -33,6 +33,7 @@ table! {
         id -> Uuid,
         created_at -> Timestamp,
         airdrop_keypair -> Bytea,
+        team_id -> Uuid,
     }
 }
 
@@ -58,6 +59,8 @@ allow_tables_to_appear_in_same_query!(
     accounts,
     blocks,
     blockchain,
+    teams,
+    api_keys
 );
 
 table! {
@@ -114,5 +117,22 @@ table! {
         created_at -> Timestamp,
         transaction_signature -> Text,
         signature -> Text
+    }
+}
+
+table! {
+    teams (id) {
+        id -> Uuid,
+        created_at -> Timestamp,
+        name -> Text,
+    }
+}
+
+table! {
+    api_keys (id) {
+        id -> Uuid,
+        created_at -> Timestamp,
+        team_id -> Uuid,
+        label -> Text,
     }
 }

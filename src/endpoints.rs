@@ -13,15 +13,22 @@ use crate::{
         rpc::{handle_request, RpcMethod, RpcRequest},
         ws::handle_ws_request,
     },
-    storage::PgStorage,
+    storage::{PgStorage, Storage},
 };
 
 pub async fn rpc_reqest(
     req: web::Json<RpcRequest>,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
+    http_req: HttpRequest,
 ) -> impl Responder {
     let id = path.into_inner();
+    if !valid_api_key(id, svm.clone(), http_req) {
+        return HttpResponse::Unauthorized().json(json!({
+            "message": "Invalid API key"
+        }));
+    }
+
     let res = handle_request(id, req.clone(), &svm);
     println!("{:?}", req.method);
     if req.method != RpcMethod::GetAccountInfo {
@@ -34,6 +41,7 @@ pub async fn rpc_ws(
     req: HttpRequest,
     path: web::Path<Uuid>,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    http_req: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse, Error> {
     let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
@@ -41,6 +49,11 @@ pub async fn rpc_ws(
         .aggregate_continuations()
         .max_continuation_size(2_usize.pow(20));
     let id = path.into_inner();
+    if !valid_api_key(id, svm.clone(), http_req) {
+        return Ok(HttpResponse::Unauthorized().json(json!({
+            "message": "Invalid API key"
+        })));
+    }
     rt::spawn(async move {
         while let Some(msg) = stream.next().await {
             match msg {
@@ -77,8 +90,14 @@ pub async fn load_program(
     mut payload: Multipart,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
+    http_req: HttpRequest,
 ) -> impl Responder {
     let id = path.into_inner();
+    if !valid_api_key(id, svm.clone(), http_req) {
+        return HttpResponse::Unauthorized().json(json!({
+            "message": "Invalid API key"
+        }));
+    }
     let mut program_data = Vec::new();
     let mut program_id_str = String::new();
 
@@ -117,8 +136,20 @@ pub async fn load_program(
 }
 
 #[post("/blockchains")]
-pub async fn create_blockchain(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
-    let id = svm.create_blockchain(None);
+pub async fn create_blockchain(
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    http_req: HttpRequest,
+) -> impl Responder {
+    let team_id = match get_team_id(svm.clone(), http_req) {
+        Ok(team_id) => team_id,
+        Err(e) => {
+            return HttpResponse::Unauthorized().json(json!({
+                "message": e
+            }))
+        }
+    };
+
+    let id = svm.create_blockchain(team_id, None);
     match id {
         Ok(id) => {
             let mut base_url = "https://rpc.mockchain.app/rpc/";
@@ -134,8 +165,19 @@ pub async fn create_blockchain(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> imp
 }
 
 #[get("/blockchains")]
-pub async fn get_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
-    let res = svm.get_blockchains();
+pub async fn get_blockchains(
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    http_req: HttpRequest,
+) -> impl Responder {
+    let team_id = match get_team_id(svm.clone(), http_req) {
+        Ok(team_id) => team_id,
+        Err(e) => {
+            return HttpResponse::Unauthorized().json(json!({
+                "message": e
+            }))
+        }
+    };
+    let res = svm.get_blockchains(team_id);
     match res {
         Ok(blockchains) => HttpResponse::Ok().json(json!({
             "blockchains": blockchains.iter().map(|b| format!("https://rpc.mockchain.app/rpc/{}", b.id.to_string())).collect::<Vec<String>>()
@@ -145,8 +187,19 @@ pub async fn get_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl 
 }
 
 #[delete("/blockchains")]
-pub async fn delete_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
-    let blockchains = match svm.get_blockchains() {
+pub async fn delete_blockchains(
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    http_req: HttpRequest,
+) -> impl Responder {
+    let team_id = match get_team_id(svm.clone(), http_req) {
+        Ok(team_id) => team_id,
+        Err(e) => {
+            return HttpResponse::Unauthorized().json(json!({
+                "message": e
+            }))
+        }
+    };
+    let blockchains = match svm.get_blockchains(team_id) {
         Ok(blockchains) => blockchains,
         Err(e) => return HttpResponse::InternalServerError().json(e.to_string()),
     };
@@ -163,13 +216,66 @@ pub async fn delete_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> im
 pub async fn delete_blockchain(
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
+    http_req: HttpRequest,
 ) -> impl Responder {
     let id = path.into_inner();
+    if !valid_api_key(id, svm.clone(), http_req) {
+        return HttpResponse::Unauthorized().json(json!({
+            "message": "Invalid API key"
+        }));
+    }
     let res = svm.delete_blockchain(id);
     match res {
         Ok(_) => HttpResponse::Ok().json(json!({
             "message": "Blockchain deleted successfully"
         })),
         Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+    }
+}
+
+fn valid_api_key(
+    id: Uuid,
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    http_req: HttpRequest,
+) -> bool {
+    let api_key = http_req
+        .headers()
+        .get("api_key")
+        .and_then(|header_value| header_value.to_str().ok())
+        .unwrap_or("");
+    let api_key = match Uuid::parse_str(api_key) {
+        Ok(api_key) => api_key,
+        Err(_) => {
+            return false;
+        }
+    };
+    let team = match svm.storage.get_team_from_api_key(api_key) {
+        Ok(team) => team,
+        Err(_) => {
+            return false;
+        }
+    };
+    if team.id != id {
+        return false;
+    }
+    true
+}
+
+fn get_team_id(
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    http_req: HttpRequest,
+) -> Result<Uuid, String> {
+    let api_key = http_req
+        .headers()
+        .get("api_key")
+        .and_then(|header_value| header_value.to_str().ok())
+        .unwrap_or("");
+
+    match Uuid::parse_str(api_key) {
+        Ok(api_key) => match svm.storage.get_team_from_api_key(api_key) {
+            Ok(team) => Ok(team.id),
+            Err(_) => Err("Invalid API key".to_string()),
+        },
+        Err(_) => Err("Invalid API key".to_string()),
     }
 }

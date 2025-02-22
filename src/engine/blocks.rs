@@ -16,4 +16,5 @@ pub struct Blockchain {
     pub id: Uuid,
     pub created_at: chrono::NaiveDateTime,
     pub airdrop_keypair: Keypair,
+    pub team_id: Uuid,
 }

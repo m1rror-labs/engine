@@ -62,8 +62,12 @@ pub trait SVM<T: Storage + Clone + 'static> {
 
     fn new_loader(&self, id: Uuid) -> Loader<T>;
 
-    fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String>;
-    fn get_blockchains(&self) -> Result<Vec<Blockchain>, String>;
+    fn create_blockchain(
+        &self,
+        team_id: Uuid,
+        airdrop_keypair: Option<Keypair>,
+    ) -> Result<Uuid, String>;
+    fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
@@ -134,7 +138,7 @@ pub struct SvmEngine<T: Storage + Clone + 'static> {
     fee_structure: FeeStructure,
     feature_set: FeatureSet,
     sysvar_cache: SysvarCache,
-    storage: T,
+    pub storage: T,
     transaction_processor: Arc<TransactionProcessor<T>>,
 }
 
@@ -192,7 +196,11 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         }
     }
 
-    fn create_blockchain(&self, airdrop_keypair: Option<Keypair>) -> Result<Uuid, String> {
+    fn create_blockchain(
+        &self,
+        team_id: Uuid,
+        airdrop_keypair: Option<Keypair>,
+    ) -> Result<Uuid, String> {
         let keypair = match airdrop_keypair {
             Some(k) => k,
             None => Keypair::new(),
@@ -202,6 +210,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             id: Uuid::new_v4(),
             created_at: Utc::now().naive_utc(),
             airdrop_keypair: keypair.insecure_clone(),
+            team_id,
         };
 
         let id = self.storage.set_blockchain(&blockchain)?;
@@ -250,8 +259,8 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         self.storage.delete_blockchain(id)
     }
 
-    fn get_blockchains(&self) -> Result<Vec<Blockchain>, String> {
-        self.storage.get_blockchains()
+    fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String> {
+        self.storage.get_blockchains(team_id)
     }
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String> {

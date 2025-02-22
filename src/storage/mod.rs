@@ -17,6 +17,7 @@ use solana_sdk::transaction::TransactionError;
 use solana_sdk::{
     account::Account, hash::Hash, pubkey::Pubkey, signature::Signature, transaction::Transaction,
 };
+use teams::Team;
 use transactions::{
     DbTransaction, DbTransactionAccountKey, DbTransactionInstruction, DbTransactionLogMessage,
     DbTransactionMeta, DbTransactionSignature,
@@ -25,12 +26,15 @@ use uuid::Uuid;
 
 pub mod accounts;
 pub mod blocks;
+pub mod teams;
 pub mod transactions;
 
 use crate::engine::blocks::Blockchain;
 use crate::engine::{blocks::Block, transactions::TransactionMetadata};
 
 pub trait Storage {
+    fn get_team_from_api_key(&self, api_key: Uuid) -> Result<Team, String>;
+
     fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String>;
     fn get_accounts(
         &self,
@@ -61,7 +65,7 @@ pub trait Storage {
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
 
     fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String>;
-    fn get_blockchains(&self) -> Result<Vec<Blockchain>, String>;
+    fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
     fn set_blockchain(&self, blockchain: &Blockchain) -> Result<Uuid, String>;
 
@@ -112,6 +116,20 @@ impl PgStorage {
 }
 
 impl Storage for PgStorage {
+    fn get_team_from_api_key(&self, api_key: Uuid) -> Result<Team, String> {
+        let mut conn = self.get_connection()?;
+        let team = crate::schema::api_keys::table
+            .filter(crate::schema::api_keys::id.eq(api_key))
+            .inner_join(
+                crate::schema::teams::table
+                    .on(crate::schema::api_keys::team_id.eq(crate::schema::teams::id)),
+            )
+            .select(crate::schema::teams::all_columns)
+            .first::<Team>(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(team)
+    }
+
     fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String> {
         let mut conn = self.get_connection()?;
         let blockchain = crate::schema::blockchain::table
@@ -120,9 +138,10 @@ impl Storage for PgStorage {
             .map_err(|e| e.to_string())?;
         Ok(blockchain.to_blockchain())
     }
-    fn get_blockchains(&self) -> Result<Vec<Blockchain>, String> {
+    fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String> {
         let mut conn = self.get_connection()?;
         let blockchains = crate::schema::blockchain::table
+            .filter(crate::schema::blockchain::team_id.eq(team_id))
             .load::<DbBlockchain>(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(blockchains.into_iter().map(|b| b.to_blockchain()).collect())
@@ -134,6 +153,7 @@ impl Storage for PgStorage {
             id: blockchain.id,
             created_at: blockchain.created_at,
             airdrop_keypair: blockchain.airdrop_keypair.to_bytes().to_vec(),
+            team_id: blockchain.team_id,
         };
         diesel::insert_into(crate::schema::blockchain::table)
             .values(&db_blockchain)

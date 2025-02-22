@@ -12,6 +12,7 @@ pub struct DbBlockchain {
     pub id: Uuid,
     pub created_at: chrono::NaiveDateTime,
     pub airdrop_keypair: Vec<u8>,
+    pub team_id: Uuid,
 }
 
 impl DbBlockchain {
@@ -20,6 +21,7 @@ impl DbBlockchain {
             id: self.id,
             created_at: self.created_at,
             airdrop_keypair: Keypair::from_bytes(self.airdrop_keypair.as_slice()).unwrap(),
+            team_id: self.team_id,
         }
     }
 }
