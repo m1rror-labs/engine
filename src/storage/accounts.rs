@@ -1,3 +1,4 @@
+use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::prelude::*;
 use solana_sdk::{account::Account, pubkey::Pubkey};
 use std::str::FromStr;
@@ -14,7 +15,7 @@ pub struct DbAccount {
     pub data: Vec<u8>,
     pub owner: String,
     pub executable: bool,
-    pub rent_epoch: i64,
+    pub rent_epoch: BigDecimal,
     pub label: Option<String>,
     pub blockchain: Uuid,
 }
@@ -34,7 +35,7 @@ impl DbAccount {
             data: account.data.clone(),
             owner: account.owner.to_string(),
             executable: account.executable,
-            rent_epoch: account.rent_epoch as i64,
+            rent_epoch: account.rent_epoch.into(),
             label,
             blockchain,
         }
@@ -47,7 +48,7 @@ impl DbAccount {
             data: self.data,
             owner: Pubkey::from_str(&self.owner).unwrap(),
             executable: self.executable,
-            rent_epoch: 1000000000000,
+            rent_epoch: self.rent_epoch.to_u64().unwrap(),
         }
     }
 }

@@ -9,7 +9,7 @@ table! {
         data -> Bytea,
         owner -> Varchar,
         executable -> Bool,
-        rent_epoch -> BigInt,
+        rent_epoch -> Numeric,
         label -> Nullable<Varchar>,
         blockchain -> Uuid,
     }

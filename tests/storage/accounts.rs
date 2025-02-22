@@ -26,10 +26,10 @@ fn test_set_account() {
         data: vec![1, 2, 3],
         owner: solana_sdk::pubkey::new_rand(),
         executable: false,
-        rent_epoch: 0,
+        rent_epoch: 18446744073708552000,
     };
 
-    let id = uuid::Uuid::new_v4();
+    let id = uuid::Uuid::parse_str("110200f4-1a05-4a3f-b4f9-6bc38ff19cdf").unwrap();
     let address = solana_sdk::pubkey::new_rand();
 
     storage
