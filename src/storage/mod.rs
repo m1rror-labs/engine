@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use accounts::DbAccount;
+use bigdecimal::BigDecimal;
 use blocks::{DbBlock, DbBlockchain};
 use chrono::Utc;
 use diesel::dsl::sql;
@@ -199,7 +200,7 @@ impl Storage for PgStorage {
                 .filter(crate::schema::accounts::address.eq(address.to_string()))
                 .filter(crate::schema::accounts::blockchain.eq(id)),
         )
-        .set(crate::schema::accounts::lamports.eq(lamports as i64))
+        .set(crate::schema::accounts::lamports.eq::<BigDecimal>(lamports.into()))
         .execute(&mut conn)
         .map_err(|e| e.to_string())?;
         Ok(())

@@ -5,7 +5,7 @@ table! {
         id -> Uuid,
         created_at -> Timestamp,
         address -> Varchar,
-        lamports -> BigInt,
+        lamports -> Numeric,
         data -> Bytea,
         owner -> Varchar,
         executable -> Bool,

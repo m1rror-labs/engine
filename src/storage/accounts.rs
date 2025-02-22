@@ -11,7 +11,7 @@ pub struct DbAccount {
     pub id: Uuid,
     pub created_at: chrono::NaiveDateTime,
     pub address: String,
-    pub lamports: i64,
+    pub lamports: BigDecimal,
     pub data: Vec<u8>,
     pub owner: String,
     pub executable: bool,
@@ -31,7 +31,7 @@ impl DbAccount {
             id: Uuid::new_v4(),
             created_at: chrono::Utc::now().naive_utc(),
             address: pubkey.to_string(),
-            lamports: account.lamports as i64,
+            lamports: account.lamports.into(),
             data: account.data.clone(),
             owner: account.owner.to_string(),
             executable: account.executable,
@@ -44,7 +44,7 @@ impl DbAccount {
     pub fn into_account(self) -> Account {
         Account {
             //TODO: Will the i64 to u64 conversion cause issues?
-            lamports: self.lamports.try_into().unwrap(),
+            lamports: self.lamports.to_u64().unwrap(),
             data: self.data,
             owner: Pubkey::from_str(&self.owner).unwrap(),
             executable: self.executable,
