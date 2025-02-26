@@ -212,7 +212,13 @@ pub async fn delete_blockchain(
     http_req: HttpRequest,
 ) -> impl Responder {
     let id = path.into_inner();
-    if !valid_api_key(id, svm.clone(), http_req) {
+    let blockchain = match svm.storage.get_blockchain(id) {
+        Ok(blockchain) => blockchain,
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(e.to_string());
+        }
+    };
+    if !valid_api_key(blockchain.team_id, svm.clone(), http_req) {
         return HttpResponse::Unauthorized().json(json!({
             "message": "Invalid API key"
         }));
