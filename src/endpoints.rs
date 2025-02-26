@@ -136,9 +136,9 @@ pub async fn create_blockchain(
         Err(e) => return HttpResponse::InternalServerError().json(e.to_string()),
     };
 
-    if existing_blockchains.len() >= 5 {
+    if existing_blockchains.len() >= 10 {
         return HttpResponse::BadRequest().json(json!({
-            "message": "You can only create 5 blockchains per team"
+            "message": "You can only create 10 blockchains per team"
         }));
     }
 
@@ -233,7 +233,7 @@ fn valid_api_key(
 ) -> bool {
     let api_key = http_req
         .headers()
-        .get("api-key")
+        .get("api_key")
         .and_then(|header_value| header_value.to_str().ok())
         .unwrap_or("");
     let api_key = match Uuid::parse_str(api_key) {
@@ -260,7 +260,7 @@ fn get_team_id(
 ) -> Result<Uuid, String> {
     let api_key = http_req
         .headers()
-        .get("api-key")
+        .get("api_key")
         .and_then(|header_value| header_value.to_str().ok())
         .unwrap_or("");
 
