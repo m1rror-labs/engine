@@ -238,7 +238,19 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 data: vec![],
                 owner: system_program::id(),
                 executable: false,
-                rent_epoch: 1000000,
+                rent_epoch: 100000000000,
+            },
+            None,
+        )?;
+        self.storage.set_account(
+            id,
+            &sysvar::id(),
+            Account {
+                lamports:1200000000,
+                data: vec![],
+                owner: system_program::id(),
+                executable: false,
+                rent_epoch: 100000000000,
             },
             None,
         )?;

@@ -1,21 +1,11 @@
 use solana_program::pubkey;
-use token22::TOKEN_2022_BASE_64_STR;
 use uuid::Uuid;
-use base64::prelude::*;
 
 use crate::storage::Storage;
-mod token22;
 
 use super::{SvmEngine, SVM};
 
 pub fn load_spl_programs<T: Storage + Clone + 'static>(svm: &SvmEngine<T>, id: Uuid) -> Result<(), String> {
-    let token_2022_bytes = match BASE64_STANDARD.decode(TOKEN_2022_BASE_64_STR) {
-        Ok(b) => b,
-        Err(e) => {
-            return Err(format!("Failed to decode token22 base64: {}", e));
-        }
-    };
-
     svm.add_program(
         id,
         pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
@@ -24,7 +14,7 @@ pub fn load_spl_programs<T: Storage + Clone + 'static>(svm: &SvmEngine<T>, id: U
     svm.add_program(
         id,
         pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"),
-        &token_2022_bytes,
+        include_bytes!("programs/spl_token_2022-1.0.0.so"),
     )?;
     svm.add_program(
         id,
