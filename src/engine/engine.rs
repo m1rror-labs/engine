@@ -23,7 +23,6 @@ use solana_sdk::{
     pubkey::Pubkey,
     rent::Rent,
     reserved_account_keys::ReservedAccountKeys,
-    slot_history::SlotHistory,
     stake_history::StakeHistory,
     sysvar::{Sysvar, SysvarId},
     transaction::{MessageHash, SanitizedTransaction, TransactionError, VersionedTransaction},
@@ -118,6 +117,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         self.sysvar_cache.fill_missing_entries(|_, set_sysvar| {
             set_sysvar(account.data());
         });
+        self.sysvar_cache.set_sysvar_for_tests(sysvar);
     }
 
     pub fn set_sysvars(&mut self) {
@@ -126,7 +126,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         self.set_sysvar(&EpochSchedule::default());
         self.set_sysvar(&LastRestartSlot::default());
         self.set_sysvar(&Rent::default());
-        self.set_sysvar(&SlotHistory::default());
+        // self.set_sysvar(&SlotHistory::default());
         self.set_sysvar(&StakeHistory::default());
     }
 
@@ -352,6 +352,9 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             true,
         )
         .unwrap();
+        let mut mut_self = self.clone();
+        mut_self.set_sysvars();
+
         let program_runtime_v2 =
             create_program_runtime_environment_v2(&ComputeBudget::default(), true);
         program_cache_for_tx_batch.environments.program_runtime_v1 = Arc::new(program_runtime_v1);

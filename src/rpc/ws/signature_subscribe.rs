@@ -47,7 +47,7 @@ pub async fn signature_subscribe<T: Storage + Clone + 'static>(
         _ => return Err("Invalid `commitment` value".to_string()),
     };
 
-    let sub_id = rand::random::<u64>();
+    let sub_id = rand::random::<u32>();
     session
         .text(
             serde_json::json!({

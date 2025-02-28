@@ -230,6 +230,9 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 transactions: vec![],
             },
         )?;
+
+        self.save_sysvars(id)?;
+
         self.storage.set_account(
             id,
             &keypair.pubkey(),
@@ -242,18 +245,18 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             },
             None,
         )?;
-        self.storage.set_account(
-            id,
-            &sysvar::id(),
-            Account {
-                lamports:1200000000,
-                data: vec![],
-                owner: system_program::id(),
-                executable: false,
-                rent_epoch: 100000000000,
-            },
-            None,
-        )?;
+        // self.storage.set_account(
+        //     id,
+        //     &sysvar::id(),
+        //     Account {
+        //         lamports: 1200000000,
+        //         data: vec![],
+        //         owner: system_program::id(),
+        //         executable: false,
+        //         rent_epoch: 100000000000,
+        //     },
+        //     None,
+        // )?;
         BUILTINS.iter().for_each(|builtint| {
             let mut account: Account =
                 native_loader::create_loadable_account_for_test(builtint.name).into();
@@ -572,6 +575,18 @@ impl<T: Storage + Clone + 'static> SvmEngine<T> {
         self.sysvar_cache.fill_missing_entries(|_, set_sysvar| {
             set_sysvar(account.data());
         });
+        self.sysvar_cache.set_sysvar_for_tests(sysvar);
+    }
+
+    pub fn save_sysvar<S>(&self, id: Uuid, sysvar: &S) -> Result<(), String>
+    where
+        S: Sysvar + SysvarId,
+    {
+        let account = AccountSharedData::new_data(1, &sysvar, &solana_sdk::sysvar::id()).unwrap();
+        self.storage
+            .set_account(id, &S::id(), account.into(), None)
+            .unwrap();
+        Ok(())
     }
 
     fn set_sysvars(&mut self) {
@@ -580,8 +595,18 @@ impl<T: Storage + Clone + 'static> SvmEngine<T> {
         self.set_sysvar(&EpochSchedule::default());
         self.set_sysvar(&LastRestartSlot::default());
         self.set_sysvar(&Rent::default());
-        self.set_sysvar(&SlotHistory::default());
+        // self.set_sysvar(&SlotHistory::default());
         self.set_sysvar(&StakeHistory::default());
+    }
+    fn save_sysvars(&self, id: Uuid) -> Result<(), String> {
+        self.save_sysvar(id, &Clock::default())?;
+        self.save_sysvar(id, &EpochRewards::default())?;
+        self.save_sysvar(id, &EpochSchedule::default())?;
+        self.save_sysvar(id, &LastRestartSlot::default())?;
+        self.save_sysvar(id, &Rent::default())?;
+        self.save_sysvar(id, &SlotHistory::default())?;
+        self.save_sysvar(id, &StakeHistory::default())?;
+        Ok(())
     }
 }
 
@@ -876,8 +901,11 @@ impl<T: Storage + Clone + 'static> Loader<T> {
         if table_account.owner() == &address_lookup_table::program::id() {
             let slot_hashes = self.sysvar_cache.get_slot_hashes().unwrap();
             let current_slot = self.sysvar_cache.get_clock().unwrap().slot;
-            let lookup_table = AddressLookupTable::deserialize(table_account.data())
-                .map_err(|_ix_err| AddressLookupError::InvalidAccountData)?;
+            let lookup_table =
+                AddressLookupTable::deserialize(table_account.data()).map_err(|_ix_err| {
+                    println!("Error deserializing lookup table {:?}", _ix_err);
+                    AddressLookupError::InvalidLookupIndex
+                })?;
 
             Ok(LoadedAddresses {
                 writable: lookup_table.lookup(
