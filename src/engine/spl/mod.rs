@@ -5,7 +5,10 @@ use crate::storage::Storage;
 
 use super::{SvmEngine, SVM};
 
-pub fn load_spl_programs<T: Storage + Clone + 'static>(svm: &SvmEngine<T>, id: Uuid) -> Result<(), String> {
+pub fn load_spl_programs<T: Storage + Clone + 'static>(
+    svm: &SvmEngine<T>,
+    id: Uuid,
+) -> Result<(), String> {
     svm.add_program(
         id,
         pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
@@ -14,7 +17,7 @@ pub fn load_spl_programs<T: Storage + Clone + 'static>(svm: &SvmEngine<T>, id: U
     svm.add_program(
         id,
         pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"),
-        include_bytes!("programs/spl_token_2022-1.0.0.so"),
+        include_bytes!("programs/spl_token_2022.so"),
     )?;
     svm.add_program(
         id,

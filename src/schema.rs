@@ -29,7 +29,7 @@ table! {
 }
 
 table! {
-    blockchain (id) {
+    blockchains (id) {
         id -> Uuid,
         created_at -> Timestamp,
         airdrop_keypair -> Bytea,
@@ -58,7 +58,7 @@ allow_tables_to_appear_in_same_query!(
     transaction_signatures,
     accounts,
     blocks,
-    blockchain,
+    blockchains,
     teams,
     api_keys
 );

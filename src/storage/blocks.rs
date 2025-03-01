@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::engine::blocks::{Block, Blockchain};
 
 #[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
-#[diesel(table_name = crate::schema::blockchain)]
+#[diesel(table_name = crate::schema::blockchains)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbBlockchain {
     pub id: Uuid,

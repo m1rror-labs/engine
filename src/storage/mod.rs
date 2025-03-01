@@ -132,16 +132,16 @@ impl Storage for PgStorage {
 
     fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String> {
         let mut conn = self.get_connection()?;
-        let blockchain = crate::schema::blockchain::table
-            .filter(crate::schema::blockchain::id.eq(id))
+        let blockchain = crate::schema::blockchains::table
+            .filter(crate::schema::blockchains::id.eq(id))
             .first::<DbBlockchain>(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(blockchain.to_blockchain())
     }
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String> {
         let mut conn = self.get_connection()?;
-        let blockchains = crate::schema::blockchain::table
-            .filter(crate::schema::blockchain::team_id.eq(team_id))
+        let blockchains = crate::schema::blockchains::table
+            .filter(crate::schema::blockchains::team_id.eq(team_id))
             .load::<DbBlockchain>(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(blockchains.into_iter().map(|b| b.to_blockchain()).collect())
@@ -155,7 +155,7 @@ impl Storage for PgStorage {
             airdrop_keypair: blockchain.airdrop_keypair.to_bytes().to_vec(),
             team_id: blockchain.team_id,
         };
-        diesel::insert_into(crate::schema::blockchain::table)
+        diesel::insert_into(crate::schema::blockchains::table)
             .values(&db_blockchain)
             .execute(&mut conn)
             .map_err(|e| e.to_string())?;
@@ -165,7 +165,7 @@ impl Storage for PgStorage {
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String> {
         let mut conn = self.get_connection()?;
         diesel::delete(
-            crate::schema::blockchain::table.filter(crate::schema::blockchain::id.eq(id)),
+            crate::schema::blockchains::table.filter(crate::schema::blockchains::id.eq(id)),
         )
         .execute(&mut conn)
         .map_err(|e| e.to_string())?;
