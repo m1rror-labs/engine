@@ -145,7 +145,7 @@ pub async fn create_blockchain(
     let id = svm.create_blockchain(team_id, None);
     match id {
         Ok(id) => {
-            let mut base_url = "https://rpc.mockchain.app/rpc/";
+            let mut base_url = "https://rpc.mirror.ad/rpc/";
             if env::var("ENV").unwrap_or_else(|_| "prod".to_string()) == "dev" {
                 base_url = "http://localhost:8080/rpc/";
             }
@@ -173,7 +173,7 @@ pub async fn get_blockchains(
     let res = svm.get_blockchains(team_id);
     match res {
         Ok(blockchains) => HttpResponse::Ok().json(json!({
-            "blockchains": blockchains.iter().map(|b| format!("https://rpc.mockchain.app/rpc/{}", b.id.to_string())).collect::<Vec<String>>()
+            "blockchains": blockchains.iter().map(|b| format!("https://rpc.mirror.ad/rpc/{}", b.id.to_string())).collect::<Vec<String>>()
         })),
         Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
     }
