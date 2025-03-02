@@ -34,6 +34,7 @@ table! {
         created_at -> Timestamp,
         airdrop_keypair -> Bytea,
         team_id -> Uuid,
+        label -> Nullable<Text>,
     }
 }
 

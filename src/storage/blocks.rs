@@ -13,6 +13,7 @@ pub struct DbBlockchain {
     pub created_at: chrono::NaiveDateTime,
     pub airdrop_keypair: Vec<u8>,
     pub team_id: Uuid,
+    pub label: Option<String>,
 }
 
 impl DbBlockchain {
