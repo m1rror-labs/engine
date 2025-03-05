@@ -1,6 +1,5 @@
 use crate::engine::transactions::TransactionMeta;
 use crate::engine::transactions::TransactionMetadata;
-use crate::schema::transaction_meta::post_balances;
 use bigdecimal::BigDecimal;
 use bigdecimal::ToPrimitive;
 use diesel::prelude::*;
