@@ -1,4 +1,5 @@
 use serde::Serialize;
+use serde_json::Value;
 use solana_sdk::{
     account::AccountSharedData,
     inner_instruction::InnerInstructionsList,
@@ -24,11 +25,18 @@ pub struct TransactionMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+
 pub struct TransactionMeta {
     pub err: Option<String>,
-    pub logs: Vec<String>,
+    pub fee: u64,
+    pub log_messages: Vec<String>,
     pub inner_instructions: InnerInstructionsList,
     pub compute_units_consumed: u64,
-    pub pre_accounts: Vec<u64>,
-    pub post_accounts: Vec<u64>,
+    pub pre_balances: Vec<u64>,
+    pub pre_token_balances: Vec<u64>,
+    pub post_balances: Vec<u64>,
+    pub post_token_balances: Vec<u64>,
+    pub rewards: Vec<u64>, //todo: rewards
+    pub status: Value,
 }

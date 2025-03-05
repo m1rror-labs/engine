@@ -232,21 +232,35 @@ impl DbTransactionMeta {
     }
 
     pub fn to_metadata(&self, logs: Vec<DbTransactionLogMessage>) -> TransactionMeta {
+        let status = match &self.err {
+            Some(_) => serde_json::json!({
+                "Err": self.err,
+            }),
+            None => serde_json::json!({
+                "Ok": null,
+            }),
+        };
+
         TransactionMeta {
             err: self.err.clone(),
-            logs: logs.iter().map(|l| l.log.clone()).collect(),
+            fee: self.fee.to_u64().unwrap(),
+            log_messages: logs.iter().map(|l| l.log.clone()).collect(),
             inner_instructions: Default::default(),
             compute_units_consumed: self.compute_units_consumed.to_u64().unwrap(),
-            pre_accounts: self
+            pre_balances: self
                 .pre_balances
                 .iter()
                 .map(|a| (*a as u64).into())
                 .collect(),
-            post_accounts: self
+            pre_token_balances: vec![],
+            post_balances: self
                 .post_balances
                 .iter()
                 .map(|a| (*a as u64).into())
                 .collect(),
+            post_token_balances: vec![],
+            rewards: vec![],
+            status: status,
         }
     }
 }

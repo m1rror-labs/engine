@@ -61,12 +61,12 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
                     .map(|(idx, key)| AccountMeta {
                         pubkey: key.to_owned(),
                         is_signer: transaction.message().is_signer(idx),
-                        is_writable: transaction.message().is_writable(idx),
+                        is_writable: transaction.message().is_maybe_writable(idx, None),
                     })
                     .collect::<Vec<AccountMeta>>();
                 Ok(serde_json::json!({
-                    "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
-                    "value": {
+                    "slot": slot.block_height,
+                        "blockTime": slot.block_time,
                         "slot": status.slot,
                         "meta": tx_meta,
                         "transaction": {
@@ -91,10 +91,9 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
                                 }).collect::<Vec<Value>>(),
                                 "recentBlockhash": transaction.message.recent_blockhash.to_string(),
                             },
-                            "version": "legacy",
                             "signatures": transaction.signatures.iter().map(|signature| signature.to_string()).collect::<Vec<String>>(),
-                        },
                     },
+                    "version": "legacy", //TODO: versioning
                 }))
             }
             None => Ok(serde_json::json!({
