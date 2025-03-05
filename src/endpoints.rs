@@ -147,7 +147,7 @@ pub async fn create_blockchain(
         Ok(id) => {
             let mut base_url = "https://rpc.mirror.ad/rpc/";
             if env::var("ENV").unwrap_or_else(|_| "prod".to_string()) == "dev" {
-                base_url = "http://localhost:8080/rpc/";
+                base_url = "http://localhost:8899/rpc/";
             }
             HttpResponse::Ok().json(json!({
                 "url": format!("{}{}",base_url, id.to_string())

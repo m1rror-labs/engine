@@ -210,23 +210,20 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             pre_accounts: account_keys
                 .iter()
                 .map(|k| {
-                    let account = accounts_db.get_account(k).unwrap();
-                    (
-                        k.to_owned().to_owned(),
-                        AccountSharedData::from(account.to_owned()),
-                    )
+                    let account = accounts_db.get_account(k);
+                    match account {
+                        Some(account) => (k.to_owned().to_owned(), account.to_owned()),
+                        None => (k.to_owned().to_owned(), AccountSharedData::default()),
+                    }
                 })
                 .collect(),
             post_accounts: account_keys
                 .iter()
                 .map(|k| {
                     let account = post_accounts.iter().find(|(key, _)| k == key);
-
+                    println!("Account: {:?}", account);
                     match account {
-                        Some((_, account)) => (
-                            k.to_owned().to_owned(),
-                            AccountSharedData::from(account.to_owned()),
-                        ),
+                        Some((_, account)) => (k.to_owned().to_owned(), account.to_owned()),
                         None => (k.to_owned().to_owned(), AccountSharedData::default()),
                     }
                 })
