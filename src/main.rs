@@ -40,7 +40,7 @@ async fn main() -> std::io::Result<()> {
                     )
                     .route("/rpc/{id}", web::get().to(rpc_ws))
             })
-            .bind(("0.0.0.0", 8081))?
+            .bind(("0.0.0.0", 8900))?
             .run()
             .await
         });
@@ -68,7 +68,7 @@ async fn main() -> std::io::Result<()> {
             .service(load_program)
             .service(delete_blockchains)
     })
-    .bind(("0.0.0.0", 8080))?
+    .bind(("0.0.0.0", 8899))?
     .run()
     .await
 }

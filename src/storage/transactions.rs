@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::engine::transactions::TransactionMetadata;
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
 #[diesel(table_name = crate::schema::transactions)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransaction {
@@ -53,7 +53,7 @@ pub fn string_to_version(version: &str) -> TransactionVersion {
     }
 }
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
 #[diesel(table_name = crate::schema::transaction_account_keys)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionAccountKey {
@@ -86,7 +86,18 @@ impl DbTransactionAccountKey {
     }
 }
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
+#[derive(
+    Queryable,
+    QueryableByName,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Hash,
+)]
 #[diesel(table_name = crate::schema::transaction_instructions)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionInstruction {
@@ -145,7 +156,7 @@ impl DbTransactionInstruction {
     }
 }
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
 #[diesel(table_name = crate::schema::transaction_log_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionLogMessage {
@@ -172,7 +183,7 @@ impl DbTransactionLogMessage {
     }
 }
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
+#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
 #[diesel(table_name = crate::schema::transaction_meta)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionMeta {
@@ -209,7 +220,18 @@ impl DbTransactionMeta {
     }
 }
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]
+#[derive(
+    Queryable,
+    QueryableByName,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Hash,
+)]
 #[diesel(table_name = crate::schema::transaction_signatures)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionSignature {

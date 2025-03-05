@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use accounts::DbAccount;
@@ -463,27 +463,27 @@ impl Storage for PgStorage {
             (
                 DbTransaction,
                 Vec<DbTransactionAccountKey>,
-                Vec<DbTransactionInstruction>,
+                HashSet<DbTransactionInstruction>,
                 Vec<DbTransactionLogMessage>,
                 Vec<DbTransactionMeta>,
-                Vec<DbTransactionSignature>,
+                HashSet<DbTransactionSignature>,
             ),
         > = HashMap::new();
 
         for (tx, account_key, instruction, log_message, meta, signature) in res {
-            let entry = transaction_map.entry(tx.id).or_insert((
+            let entry = transaction_map.entry(tx.id.clone()).or_insert((
                 tx,
                 Vec::new(),
+                HashSet::new(),
                 Vec::new(),
                 Vec::new(),
-                Vec::new(),
-                Vec::new(),
+                HashSet::new(),
             ));
             if let Some(account_key) = account_key {
                 entry.1.push(account_key);
             };
             if let Some(instruction) = instruction {
-                entry.2.push(instruction);
+                entry.2.insert(instruction);
             };
             if let Some(log_message) = log_message {
                 entry.3.push(log_message);
@@ -492,7 +492,7 @@ impl Storage for PgStorage {
                 entry.4.push(meta);
             };
             if let Some(signature) = signature {
-                entry.5.push(signature);
+                entry.5.insert(signature);
             };
         }
 
