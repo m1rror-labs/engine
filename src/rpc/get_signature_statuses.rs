@@ -4,7 +4,7 @@ use solana_sdk::transaction::Transaction;
 use uuid::Uuid;
 
 use crate::{
-    engine::{SvmEngine, SVM},
+    engine::{transactions::TransactionMeta, SvmEngine, SVM},
     storage::Storage,
 };
 
@@ -39,13 +39,19 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
         .map(|sig_str| parse_signature(sig_str))
         .collect::<Result<Vec<solana_sdk::signature::Signature>, Value>>()?;
 
-    let txs: Vec<Option<(Transaction, TransactionStatus)>> =
-        sigs.iter()
-            .map(|sig| svm.get_transaction(id, &sig))
-            .collect::<Result<
-                Vec<Option<(solana_sdk::transaction::Transaction, TransactionStatus)>>,
-                String,
-            >>()?;
+    let txs: Vec<Option<(Transaction, _, TransactionStatus)>> = sigs
+        .iter()
+        .map(|sig| svm.get_transaction(id, &sig))
+        .collect::<Result<
+            Vec<
+                Option<(
+                    solana_sdk::transaction::Transaction,
+                    TransactionMeta,
+                    TransactionStatus,
+                )>,
+            >,
+            String,
+        >>()?;
 
     let slot = match svm.get_latest_block(id) {
         Ok(slot) => slot,
@@ -62,7 +68,7 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
         "value": txs
         .iter()
         .map(|tx| match tx {
-            Some((_, status)) => {
+            Some((_,_, status)) => {
                 let status_value = match status.err.clone() {
                     Some(err) => {
                         serde_json::json!({

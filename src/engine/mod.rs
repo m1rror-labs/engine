@@ -45,7 +45,7 @@ use spl_token::state::Account as SplAccount;
 use spl_token::state::Mint;
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration}; // Add this import at the top of your file
 use tokens::TokenAmount;
-use transactions::TransactionMetadata;
+use transactions::{TransactionMeta, TransactionMetadata};
 use uuid::Uuid;
 
 use crate::storage::{transactions::DbTransaction, Storage};
@@ -112,7 +112,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
         &self,
         id: Uuid,
         signature: &Signature,
-    ) -> Result<Option<(Transaction, TransactionStatus)>, String>;
+    ) -> Result<Option<(Transaction, TransactionMeta, TransactionStatus)>, String>;
     fn get_transaction_count(&self, id: Uuid) -> Result<u64, String>;
     fn send_transaction(&self, id: Uuid, tx: VersionedTransaction) -> Result<String, String>;
     fn simulate_transaction(
@@ -183,11 +183,10 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         loop {
             interval.tick().await;
             let tx = self.get_transaction(id, signature)?;
-            println!("Checking transaction: {:?}, {:?}", signature, tx);
             if tx == None {
                 continue;
             }
-            if let Some((_, status)) = tx {
+            if let Some((_, _, status)) = tx {
                 println!("Transaction status: {:?}", status);
                 if status.confirmation_status == Some(commitment.clone()) {
                     return Ok(status.slot);
@@ -467,7 +466,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         &self,
         id: Uuid,
         signature: &Signature,
-    ) -> Result<Option<(Transaction, TransactionStatus)>, String> {
+    ) -> Result<Option<(Transaction, TransactionMeta, TransactionStatus)>, String> {
         let res = match self.storage.get_transaction(id, signature) {
             Ok(res) => res,
             Err(e) => {
@@ -478,9 +477,11 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         if res == None {
             return Ok(None);
         }
-        let (tx, slot, tx_res, created_at) = res.unwrap();
+        let (tx, slot, tx_meta, tx_res, created_at) = res.unwrap();
+
         Ok(Some((
             tx,
+            tx_meta,
             TransactionStatus {
                 slot,
                 confirmations: None,

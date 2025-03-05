@@ -1,4 +1,6 @@
+use base64::prelude::*;
 use serde_json::Value;
+use solana_sdk::instruction::AccountMeta;
 use uuid::Uuid;
 
 use crate::{
@@ -27,6 +29,7 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
             }));
         }
     };
+
     let signature = match parse_signature(sig_str) {
         Ok(signature) => signature,
         Err(e) => {
@@ -49,31 +52,51 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
 
     match svm.get_transaction(id, &signature) {
         Ok(transaction) => match transaction {
-            Some((transaction, status)) => Ok(serde_json::json!({
-                "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
-                "value": {
-                    "slot": status.slot,
-                    "transaction": {
-                        "message": {
-                            "accountKeys": transaction.message.account_keys.iter().map(|key| key.to_string()).collect::<Vec<String>>(),
-                            "header": {
-                                "numReadonlySignedAccounts": transaction.message.header.num_readonly_signed_accounts,
-                                "numReadonlyUnsignedAccounts": transaction.message.header.num_readonly_unsigned_accounts,
-                                "numRequiredSignatures": transaction.message.header.num_required_signatures,
+            Some((transaction, tx_meta, status)) => {
+                let account_metas = transaction
+                    .message()
+                    .account_keys
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, key)| AccountMeta {
+                        pubkey: key.to_owned(),
+                        is_signer: transaction.message().is_signer(idx),
+                        is_writable: transaction.message().is_writable(idx),
+                    })
+                    .collect::<Vec<AccountMeta>>();
+                Ok(serde_json::json!({
+                    "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
+                    "value": {
+                        "slot": status.slot,
+                        "meta": tx_meta,
+                        "transaction": {
+                            "message": {
+                                "accountKeys": account_metas.iter().map(|meta| {
+                                    serde_json::json!({
+                                        "pubkey": meta.pubkey.to_string(),
+                                        "signer": meta.is_signer,
+                                        "writable": meta.is_writable,
+                                        "source": "transaction",
+                                    })
+                                }).collect::<Vec<Value>>(),
+                                "instructions": transaction.message.instructions.iter().map(|instruction| {
+                                    let program_id = instruction.program_id(&transaction.message.account_keys);
+                                    let data_str = BASE64_STANDARD.encode(&instruction.data);
+                                    serde_json::json!({
+                                        "accounts": instruction.accounts.iter().map(|idx| transaction.message.account_keys[*idx as usize].to_string()).collect::<Vec<String>>(),
+                                        "data": data_str,
+                                        "programId": program_id.to_string(),
+                                        "stackHeight":null,
+                                    })
+                                }).collect::<Vec<Value>>(),
+                                "recentBlockhash": transaction.message.recent_blockhash.to_string(),
                             },
-                            "instructions": transaction.message.instructions.iter().map(|instruction| {
-                                serde_json::json!({
-                                    "accounts": instruction.accounts,
-                                    "data": instruction.data,
-                                    "programIdIndex": instruction.program_id_index,
-                                })
-                            }).collect::<Vec<Value>>(),
-                            "recentBlockhash": transaction.message.recent_blockhash.to_string(),
+                            "version": "legacy",
+                            "signatures": transaction.signatures.iter().map(|signature| signature.to_string()).collect::<Vec<String>>(),
                         },
-                        "signatures": transaction.signatures.iter().map(|signature| signature.to_string()).collect::<Vec<String>>(),
                     },
-                },
-            })),
+                }))
+            }
             None => Ok(serde_json::json!({
                 "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
                 "value": null,

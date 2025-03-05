@@ -30,6 +30,7 @@ pub mod teams;
 pub mod transactions;
 
 use crate::engine::blocks::Blockchain;
+use crate::engine::transactions::TransactionMeta;
 use crate::engine::{blocks::Block, transactions::TransactionMetadata};
 
 pub trait Storage {
@@ -78,6 +79,7 @@ pub trait Storage {
         Option<(
             Transaction,
             u64,
+            TransactionMeta,
             Option<TransactionError>,
             chrono::NaiveDateTime,
         )>,
@@ -407,6 +409,7 @@ impl Storage for PgStorage {
         Option<(
             Transaction,
             u64,
+            TransactionMeta,
             Option<TransactionError>,
             chrono::NaiveDateTime,
         )>,
@@ -510,7 +513,7 @@ impl Storage for PgStorage {
             return Err("Multiple transactions found with the same signature".to_string());
         }
 
-        let (db_tx, account_keys, instructions, _, metas, signatures) =
+        let (db_tx, account_keys, instructions, logs, metas, signatures) =
             transaction_map.into_iter().next().unwrap().1;
 
         let instructions = instructions
@@ -520,15 +523,20 @@ impl Storage for PgStorage {
 
         let tx_meta = metas.first().ok_or_else(|| "No meta found".to_string())?;
 
+        let tx = Transaction {
+            signatures: signatures
+                .into_iter()
+                .map(|s| Signature::from_str(&s.signature).unwrap())
+                .collect(),
+            message: solana_sdk::message::Message::new(&instructions, None),
+        };
+
+        let metadata = tx_meta.to_metadata(logs);
+
         Ok(Some((
-            Transaction {
-                signatures: signatures
-                    .into_iter()
-                    .map(|s| Signature::from_str(&s.signature).unwrap())
-                    .collect(),
-                message: solana_sdk::message::Message::new(&instructions, None),
-            },
+            tx,
             db_tx.slot.to_u64().unwrap(),
+            metadata,
             match tx_meta.to_owned().err {
                 Some(e) => {
                     let deserialized_error: Result<TransactionError, _> = serde_json::from_str(&e);

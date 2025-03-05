@@ -1,4 +1,7 @@
+use crate::engine::transactions::TransactionMeta;
+use crate::engine::transactions::TransactionMetadata;
 use bigdecimal::BigDecimal;
+use bigdecimal::ToPrimitive;
 use diesel::prelude::*;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::{
@@ -7,8 +10,6 @@ use solana_sdk::{
 };
 use std::str::FromStr;
 use uuid::Uuid;
-
-use crate::engine::transactions::TransactionMetadata;
 
 #[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
 #[diesel(table_name = crate::schema::transactions)]
@@ -226,6 +227,25 @@ impl DbTransactionMeta {
                 .post_accounts
                 .iter()
                 .map(|(_, a)| a.lamports() as i64)
+                .collect(),
+        }
+    }
+
+    pub fn to_metadata(&self, logs: Vec<DbTransactionLogMessage>) -> TransactionMeta {
+        TransactionMeta {
+            err: self.err.clone(),
+            logs: logs.iter().map(|l| l.log.clone()).collect(),
+            inner_instructions: Default::default(),
+            compute_units_consumed: self.compute_units_consumed.to_u64().unwrap(),
+            pre_accounts: self
+                .pre_balances
+                .iter()
+                .map(|a| (*a as u64).into())
+                .collect(),
+            post_accounts: self
+                .post_balances
+                .iter()
+                .map(|a| (*a as u64).into())
                 .collect(),
         }
     }

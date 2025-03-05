@@ -1,3 +1,4 @@
+use serde::Serialize;
 use solana_sdk::{
     account::AccountSharedData,
     inner_instruction::InnerInstructionsList,
@@ -20,4 +21,14 @@ pub struct TransactionMetadata {
     pub current_block: Block,
     pub pre_accounts: Vec<(Pubkey, AccountSharedData)>,
     pub post_accounts: Vec<(Pubkey, AccountSharedData)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TransactionMeta {
+    pub err: Option<String>,
+    pub logs: Vec<String>,
+    pub inner_instructions: InnerInstructionsList,
+    pub compute_units_consumed: u64,
+    pub pre_accounts: Vec<u64>,
+    pub post_accounts: Vec<u64>,
 }
