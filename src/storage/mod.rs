@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use accounts::DbAccount;
@@ -463,10 +463,10 @@ impl Storage for PgStorage {
             (
                 DbTransaction,
                 Vec<DbTransactionAccountKey>,
-                HashSet<DbTransactionInstruction>,
+                Vec<DbTransactionInstruction>,
                 Vec<DbTransactionLogMessage>,
                 Vec<DbTransactionMeta>,
-                HashSet<DbTransactionSignature>,
+                Vec<DbTransactionSignature>,
             ),
         > = HashMap::new();
 
@@ -474,10 +474,10 @@ impl Storage for PgStorage {
             let entry = transaction_map.entry(tx.id.clone()).or_insert((
                 tx,
                 Vec::new(),
-                HashSet::new(),
                 Vec::new(),
                 Vec::new(),
-                HashSet::new(),
+                Vec::new(),
+                Vec::new(),
             ));
             if let Some(account_key) = account_key {
                 if entry.1.iter().find(|k| k.id == account_key.id).is_none() {
@@ -485,7 +485,9 @@ impl Storage for PgStorage {
                 }
             };
             if let Some(instruction) = instruction {
-                entry.2.insert(instruction);
+                if entry.2.iter().find(|i| i.id == instruction.id).is_none() {
+                    entry.2.push(instruction);
+                }
             };
             if let Some(log_message) = log_message {
                 entry.3.push(log_message);
@@ -494,7 +496,9 @@ impl Storage for PgStorage {
                 entry.4.push(meta);
             };
             if let Some(signature) = signature {
-                entry.5.insert(signature);
+                if entry.5.iter().find(|s| s.id == signature.id).is_none() {
+                    entry.5.push(signature);
+                }
             };
         }
 
