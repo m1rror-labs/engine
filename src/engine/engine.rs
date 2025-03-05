@@ -207,9 +207,9 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             tx: tx.clone(),
             current_block,
             //TODO: This may be wrong
-            pre_accounts: post_accounts
+            pre_accounts: account_keys
                 .iter()
-                .map(|(k, _)| {
+                .map(|k| {
                     let account = accounts_db.get_account(k).unwrap();
                     (
                         k.to_owned().to_owned(),
@@ -217,7 +217,20 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                     )
                 })
                 .collect(),
-            post_accounts: post_accounts.clone(),
+            post_accounts: account_keys
+                .iter()
+                .map(|k| {
+                    let account = post_accounts.iter().find(|(key, _)| k == key);
+
+                    match account {
+                        Some((_, account)) => (
+                            k.to_owned().to_owned(),
+                            AccountSharedData::from(account.to_owned()),
+                        ),
+                        None => (k.to_owned().to_owned(), AccountSharedData::default()),
+                    }
+                })
+                .collect(),
         };
         self.storage.save_transaction(id, &meta)?;
 
