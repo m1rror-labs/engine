@@ -207,18 +207,14 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             tx: tx.clone(),
             current_block,
             //TODO: This may be wrong
-            pre_accounts: accounts_db
-                .accounts
+            pre_accounts: post_accounts
                 .iter()
-                .map(|(k, v)| {
-                    if let Some(account) = v {
-                        (
-                            k.to_owned().to_owned(),
-                            AccountSharedData::from(account.to_owned()),
-                        )
-                    } else {
-                        (k.to_owned().to_owned(), AccountSharedData::default())
-                    }
+                .map(|(k, _)| {
+                    let account = accounts_db.get_account(k).unwrap();
+                    (
+                        k.to_owned().to_owned(),
+                        AccountSharedData::from(account.to_owned()),
+                    )
                 })
                 .collect(),
             post_accounts: post_accounts.clone(),

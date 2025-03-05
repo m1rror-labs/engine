@@ -13,7 +13,6 @@ use diesel::sql_types::{Binary, Bool};
 use diesel::upsert::excluded;
 
 use solana_sdk::instruction::Instruction;
-use solana_sdk::signer::Signer;
 use solana_sdk::transaction::TransactionError;
 use solana_sdk::{
     account::Account, hash::Hash, pubkey::Pubkey, signature::Signature, transaction::Transaction,

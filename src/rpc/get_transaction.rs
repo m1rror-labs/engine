@@ -1,6 +1,5 @@
-use base64::prelude::*;
 use serde_json::Value;
-use solana_sdk::instruction::AccountMeta;
+use solana_sdk::{bs58, instruction::AccountMeta};
 use uuid::Uuid;
 
 use crate::{
@@ -81,7 +80,7 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
                                 }).collect::<Vec<Value>>(),
                                 "instructions": transaction.message.instructions.iter().map(|instruction| {
                                     let program_id = instruction.program_id(&transaction.message.account_keys);
-                                    let data_str = BASE64_STANDARD.encode(&instruction.data);
+                                    let data_str = bs58::encode(&instruction.data).into_string();
                                     serde_json::json!({
                                         "accounts": instruction.accounts.iter().map(|idx| transaction.message.account_keys[*idx as usize].to_string()).collect::<Vec<String>>(),
                                         "data": data_str,

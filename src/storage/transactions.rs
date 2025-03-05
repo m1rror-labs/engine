@@ -1,5 +1,6 @@
 use crate::engine::transactions::TransactionMeta;
 use crate::engine::transactions::TransactionMetadata;
+use crate::schema::transaction_meta::post_balances;
 use bigdecimal::BigDecimal;
 use bigdecimal::ToPrimitive;
 use diesel::prelude::*;
@@ -151,6 +152,7 @@ impl DbTransactionInstruction {
         &self,
         keys: Vec<DbTransactionAccountKey>,
     ) -> solana_sdk::instruction::Instruction {
+        println!("to_ix {:?}", self);
         let accounts = self
             .accounts
             .iter()
@@ -258,7 +260,11 @@ impl DbTransactionMeta {
                 .map(|a| (*a as u64).into())
                 .collect(),
             pre_token_balances: vec![],
-            post_balances: [0, 0, 0].to_vec(),
+            post_balances: self
+                .post_balances
+                .iter()
+                .map(|a| (*a as u64).into())
+                .collect(),
             post_token_balances: vec![],
             rewards: vec![],
             status: status,
