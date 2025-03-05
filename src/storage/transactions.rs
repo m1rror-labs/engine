@@ -53,7 +53,18 @@ pub fn string_to_version(version: &str) -> TransactionVersion {
     }
 }
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
+#[derive(
+    Queryable,
+    QueryableByName,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Hash,
+)]
 #[diesel(table_name = crate::schema::transaction_account_keys)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionAccountKey {

@@ -480,7 +480,9 @@ impl Storage for PgStorage {
                 HashSet::new(),
             ));
             if let Some(account_key) = account_key {
-                entry.1.push(account_key);
+                if entry.1.iter().find(|k| k.id == account_key.id).is_none() {
+                    entry.1.push(account_key);
+                }
             };
             if let Some(instruction) = instruction {
                 entry.2.insert(instruction);
