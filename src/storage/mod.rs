@@ -498,7 +498,9 @@ impl Storage for PgStorage {
                 }
             };
             if let Some(log_message) = log_message {
-                entry.3.push(log_message);
+                if entry.3.iter().find(|l| l.id == log_message.id).is_none() {
+                    entry.3.push(log_message);
+                }
             };
             if let Some(meta) = meta {
                 entry.4.push(meta);
