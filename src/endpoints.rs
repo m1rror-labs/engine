@@ -85,7 +85,14 @@ pub async fn load_program(
 
     // Parse the file from the request
     while let Some(item) = payload.next().await {
-        let mut field = item.unwrap();
+        let mut field = match item {
+            Ok(i) => i,
+            Err(e) => {
+                return HttpResponse::BadRequest().json(json!({
+                    "error": e.to_string()
+                }));
+            }
+        };
         if field.name() == Some("program") {
             while let Some(chunk) = field.next().await {
                 let data = chunk.unwrap();
