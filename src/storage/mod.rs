@@ -13,6 +13,7 @@ use diesel::sql_types::{Binary, Bool};
 use diesel::upsert::excluded;
 
 use solana_sdk::instruction::Instruction;
+use solana_sdk::signer::Signer;
 use solana_sdk::transaction::TransactionError;
 use solana_sdk::{
     account::Account, hash::Hash, pubkey::Pubkey, signature::Signature, transaction::Transaction,
@@ -483,7 +484,12 @@ impl Storage for PgStorage {
                 Vec::new(),
             ));
             if let Some(account_key) = account_key {
-                if entry.1.iter().find(|k| k.id == account_key.id).is_none() {
+                if entry
+                    .1
+                    .iter()
+                    .find(|k| k.account == account_key.account)
+                    .is_none()
+                {
                     entry.1.push(account_key);
                 }
             };

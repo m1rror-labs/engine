@@ -129,15 +129,20 @@ impl DbTransactionInstruction {
             .message()
             .program_instructions_iter()
             //TODO: I had to imporvise some things, so they may not be perfect
-            .map(|(program_id, instruction)| DbTransactionInstruction {
-                id: Uuid::new_v4(),
-                created_at: chrono::Utc::now().naive_utc(),
-                transaction_signature: meta.tx.signature().to_string(),
-                accounts: instruction.accounts.iter().map(|a| *a as i16).collect(),
-                data: instruction.data.clone(),
-                program_id: program_id.to_string(),
-                stack_height: 1,
-                inner: false,
+            .map(|(program_id, instruction)| {
+                let mut accounts: Vec<i16> =
+                    instruction.accounts.iter().map(|a| *a as i16).collect();
+                accounts.push(instruction.program_id_index as i16);
+                DbTransactionInstruction {
+                    id: Uuid::new_v4(),
+                    created_at: chrono::Utc::now().naive_utc(),
+                    transaction_signature: meta.tx.signature().to_string(),
+                    accounts: instruction.accounts.iter().map(|a| *a as i16).collect(),
+                    data: instruction.data.clone(),
+                    program_id: program_id.to_string(),
+                    stack_height: 1,
+                    inner: false,
+                }
             })
             .collect()
     }
@@ -253,11 +258,7 @@ impl DbTransactionMeta {
                 .map(|a| (*a as u64).into())
                 .collect(),
             pre_token_balances: vec![],
-            post_balances: self
-                .post_balances
-                .iter()
-                .map(|a| (*a as u64).into())
-                .collect(),
+            post_balances: [0, 0, 0].to_vec(),
             post_token_balances: vec![],
             rewards: vec![],
             status: status,

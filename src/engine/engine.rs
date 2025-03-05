@@ -196,6 +196,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let Ok(logs) = Rc::try_unwrap(log_collector).map(|lc| lc.into_inner().messages) else {
             unreachable!("Log collector should not be used after send_transaction returns")
         };
+
         let meta = TransactionMetadata {
             signature,
             err: tx_result.err(),
@@ -206,17 +207,17 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             tx: tx.clone(),
             current_block,
             //TODO: This may be wrong
-            pre_accounts: post_accounts
-                .clone()
+            pre_accounts: accounts_db
+                .accounts
                 .iter()
-                .map(|(k, _)| {
-                    let val = accounts_db.get_account(k);
-                    match val {
-                        Some(account) => (
+                .map(|(k, v)| {
+                    if let Some(account) = v {
+                        (
                             k.to_owned().to_owned(),
                             AccountSharedData::from(account.to_owned()),
-                        ),
-                        None => (k.to_owned().to_owned(), AccountSharedData::default()),
+                        )
+                    } else {
+                        (k.to_owned().to_owned(), AccountSharedData::default())
                     }
                 })
                 .collect(),
