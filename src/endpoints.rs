@@ -1,10 +1,10 @@
 use actix_multipart::Multipart;
-use actix_web::{delete, get, post, rt, web, Error, HttpRequest, HttpResponse, Responder};
+use actix_web::{delete, get, post, put, rt, web, Error, HttpRequest, HttpResponse, Responder};
 use actix_ws::AggregatedMessage;
 use futures::StreamExt as _;
 use serde::Deserialize;
 use solana_sdk::{account::Account, pubkey::Pubkey};
-use std::{env, str::FromStr, sync::Arc};
+use std::{env, sync::Arc};
 
 use serde_json::json;
 use uuid::Uuid;
@@ -128,48 +128,32 @@ pub async fn load_program(
 
 #[derive(Deserialize)]
 pub struct AccountReq {
-    address: String,
+    address: Pubkey,
     lamports: u64,
     data: Vec<u8>,
-    owner: String,
+    owner: Pubkey,
     rent_epoch: u64,
     label: Option<String>,
 }
 
-#[post("/accounts/{id}")]
+#[put("/accounts/{id}")]
 pub async fn load_account(
     account: web::Json<AccountReq>,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
 ) -> impl Responder {
     let id = path.into_inner();
-    let owner = match Pubkey::from_str(&account.owner) {
-        Ok(owner) => owner,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(json!({
-                "message": "Invalid owner"
-            }));
-        }
-    };
 
     let acc = Account {
         lamports: account.lamports,
         data: account.data.clone(),
-        owner: owner,
+        owner: account.owner,
         executable: false, //Must go through upload program to upload executable accounts
         rent_epoch: account.rent_epoch,
     };
-    let address = match Pubkey::from_str(&account.address) {
-        Ok(address) => address,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(json!({
-                "message": "Invalid address"
-            }));
-        }
-    };
     match svm
         .storage
-        .set_account(id, &address, acc, account.label.clone())
+        .set_account(id, &account.address, acc, account.label.clone())
     {
         Ok(_) => HttpResponse::Ok().json(json!({
             "message": "Account loaded successfully"

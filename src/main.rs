@@ -67,6 +67,7 @@ async fn main() -> std::io::Result<()> {
             .service(get_blockchains)
             .service(load_program)
             .service(delete_blockchains)
+            .service(load_program)
     })
     .bind(("0.0.0.0", 8899))?
     .run()
