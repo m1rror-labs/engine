@@ -42,6 +42,7 @@ pub trait Storage {
         id: Uuid,
         addresses: &Vec<&Pubkey>,
     ) -> Result<Vec<Option<Account>>, String>;
+    fn get_largest_accounts(&self, id: Uuid, limit: usize) -> Result<Vec<(Pubkey, u64)>, String>;
     fn set_account(
         &self,
         id: Uuid,
@@ -207,6 +208,24 @@ impl Storage for PgStorage {
                     .iter()
                     .find(|a| a.address == address.to_string())
                     .map(|a| a.clone().into_account())
+            })
+            .collect())
+    }
+    fn get_largest_accounts(&self, id: Uuid, limit: usize) -> Result<Vec<(Pubkey, u64)>, String> {
+        let mut conn = self.get_connection()?;
+        let accounts = crate::schema::accounts::table
+            .filter(crate::schema::accounts::blockchain.eq(id))
+            .order(crate::schema::accounts::lamports.desc())
+            .limit(limit as i64)
+            .load::<DbAccount>(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(accounts
+            .iter()
+            .map(|a| {
+                (
+                    Pubkey::from_str(&a.address).unwrap(),
+                    a.lamports.to_u64().unwrap(),
+                )
             })
             .collect())
     }
