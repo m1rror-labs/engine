@@ -102,6 +102,11 @@ pub trait SVM<T: Storage + Clone + 'static> {
         id: Uuid,
         pubkey: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
+    fn get_program_accounts(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Vec<(Pubkey, Account)>, String>;
     fn get_largest_accounts(&self, id: Uuid) -> Result<Vec<(Pubkey, u64)>, String>;
     fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String>;
     fn get_token_account_balance(
@@ -444,6 +449,13 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         let mut accounts = token_accounts?;
         accounts.extend(token_2022_accounts?);
         Ok(accounts)
+    }
+    fn get_program_accounts(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Vec<(Pubkey, Account)>, String> {
+        self.storage.get_program_accounts(id, pubkey)
     }
 
     fn get_token_supply(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<TokenAmount>, String> {

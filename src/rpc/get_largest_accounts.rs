@@ -10,7 +10,7 @@ pub fn get_largest_accounts<T: Storage + Clone + 'static>(
     id: Uuid,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
-    let current_slot = match svm.latest_blockhash(id) {
+    let current_slot = match svm.get_latest_block(id) {
         Ok(blockhash) => blockhash,
         Err(e) => {
             return Err(serde_json::json!({

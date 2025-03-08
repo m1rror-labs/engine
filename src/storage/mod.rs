@@ -59,6 +59,11 @@ pub trait Storage {
         owner: &Pubkey,
         token_program: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
+    fn get_program_accounts(
+        &self,
+        id: Uuid,
+        program_id: &Pubkey,
+    ) -> Result<Vec<(Pubkey, Account)>, String>;
 
     fn set_block(&self, id: Uuid, block: &Block) -> Result<(), String>;
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String>;
@@ -315,6 +320,27 @@ impl Storage for PgStorage {
         let accounts = crate::schema::accounts::table
             .filter(crate::schema::accounts::owner.eq(token_program.to_string()))
             .filter(sql::<Bool>("contains(data, ?)").bind::<Binary, _>(owner.to_bytes().to_vec()))
+            .filter(crate::schema::accounts::blockchain.eq(id))
+            .load::<DbAccount>(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(accounts
+            .iter()
+            .map(|a| {
+                (
+                    Pubkey::from_str(&a.address).unwrap(),
+                    a.clone().into_account(),
+                )
+            })
+            .collect())
+    }
+    fn get_program_accounts(
+        &self,
+        id: Uuid,
+        program_id: &Pubkey,
+    ) -> Result<Vec<(Pubkey, Account)>, String> {
+        let mut conn = self.get_connection()?;
+        let accounts = crate::schema::accounts::table
+            .filter(crate::schema::accounts::owner.eq(program_id.to_string()))
             .filter(crate::schema::accounts::blockchain.eq(id))
             .load::<DbAccount>(&mut conn)
             .map_err(|e| e.to_string())?;

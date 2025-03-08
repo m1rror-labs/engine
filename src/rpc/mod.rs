@@ -12,6 +12,7 @@ pub mod get_largest_accounts;
 pub mod get_latest_blockhash;
 pub mod get_minimum_balance_for_rent_exemption;
 pub mod get_multiple_accounts;
+pub mod get_program_accounts;
 pub mod get_signature_statuses;
 pub mod get_signatures_for_address;
 pub mod get_slot_leaders;

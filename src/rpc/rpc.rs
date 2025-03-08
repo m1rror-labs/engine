@@ -23,7 +23,8 @@ use super::{
     get_identity::get_identity, get_largest_accounts::get_largest_accounts,
     get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
-    get_multiple_accounts::get_multiple_accounts, get_signature_statuses::get_signature_statuses,
+    get_multiple_accounts::get_multiple_accounts, get_program_accounts::get_program_accounts,
+    get_signature_statuses::get_signature_statuses,
     get_signatures_for_address::get_signatures_for_address, get_slot_leaders::get_slot_leaders,
     get_token_account_balance::get_token_account_balance,
     get_token_accounts_by_owner::get_token_accounts_by_owner, get_token_supply::get_token_supply,
@@ -253,10 +254,7 @@ pub fn handle_request<T: Storage + Clone + 'static>(
             get_minimum_balance_for_rent_exemption(&req, svm)
         }
         RpcMethod::GetMultipleAccounts => get_multiple_accounts(id, &req, svm),
-        RpcMethod::GetProgramAccounts => Err(serde_json::json!({
-            "code": -32601,
-            "message": "Method not found",
-        })),
+        RpcMethod::GetProgramAccounts => get_program_accounts(id, &req, svm),
         RpcMethod::GetRecentPerformanceSamples => Ok(serde_json::json!([{
           "numSlots": 126,
           "numTransactions": 126,
