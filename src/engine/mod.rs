@@ -228,6 +228,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             Ok(slot) => slot,
             Err(e) => return Err(e),
         };
+        let initial_slot = latest_block.block_height;
         let mut current_slot = latest_block.block_height;
         self.subscribed_slots.try_write().unwrap().push(req_id);
         let sub_slots = self.subscribed_slots.clone();
@@ -252,6 +253,13 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                         break;
                     }
                 };
+                if next_block_read.block_height > initial_slot + 100 {
+                    match tx.send(None).await {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    };
+                    break;
+                }
 
                 if next_block_read.block_height > current_slot {
                     current_slot = next_block_read.block_height;
