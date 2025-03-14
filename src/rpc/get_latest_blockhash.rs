@@ -17,7 +17,7 @@ pub fn get_latest_blockhash<T: Storage + Clone + 'static>(
               },
               "value": {
                 "blockhash": blockhash.blockhash.to_string(),
-                "lastValidBlockHeight": blockhash.block_height+20
+                "lastValidBlockHeight": blockhash.block_height+100 //hardcoded
               }
         })),
         Err(e) => Err(serde_json::json!({
