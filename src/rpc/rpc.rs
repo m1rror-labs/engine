@@ -19,9 +19,9 @@ use crate::{engine::SvmEngine, storage::Storage};
 use super::{
     get_account_info::get_account_info, get_balance::get_balance, get_block::get_block,
     get_block_commitment::get_block_commitment, get_block_height::get_block_height,
-    get_block_time::get_block_time, get_genesis_hash::get_genesis_hash, get_health::get_health,
-    get_identity::get_identity, get_largest_accounts::get_largest_accounts,
-    get_latest_blockhash::get_latest_blockhash,
+    get_block_time::get_block_time, get_epoch_info::get_epoch_info,
+    get_genesis_hash::get_genesis_hash, get_health::get_health, get_identity::get_identity,
+    get_largest_accounts::get_largest_accounts, get_latest_blockhash::get_latest_blockhash,
     get_minimum_balance_for_rent_exemption::get_minimum_balance_for_rent_exemption,
     get_multiple_accounts::get_multiple_accounts, get_program_accounts::get_program_accounts,
     get_signature_statuses::get_signature_statuses,
@@ -201,14 +201,7 @@ pub fn handle_request<T: Storage + Clone + 'static>(
         RpcMethod::GetBlocksWithLimit => Ok(serde_json::json!([5, 6, 7, 8, 9, 10])),
         RpcMethod::GetBlockTime => get_block_time(id, &req, svm),
         RpcMethod::GetClusterNodes => Ok(serde_json::json!([])),
-        RpcMethod::GetEpochInfo => Ok(serde_json::json!({
-            "absoluteSlot": 360253902,
-            "blockHeight": 348253772,
-            "epoch": 833,
-            "slotIndex": 397902,
-            "slotsInEpoch": 432000,
-            "transactionCount": 151130291,
-        })),
+        RpcMethod::GetEpochInfo => get_epoch_info(id, svm),
         RpcMethod::GetEpochSchedule => Ok(serde_json::json!({
                 "firstNormalEpoch": 8,
                 "firstNormalSlot": 8160,
