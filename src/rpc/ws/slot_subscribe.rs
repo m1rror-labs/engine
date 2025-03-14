@@ -38,7 +38,10 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
     loop {
         let res = match receiver.try_next() {
             Ok(res) => res,
-            Err(_) => return Err("Error receiving value".to_string()),
+            Err(e) => {
+                println!("Error receiving value: {:?}", e);
+                return Ok(());
+            }
         };
         let res = match res {
             Some(res) => res,
