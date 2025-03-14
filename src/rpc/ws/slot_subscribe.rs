@@ -34,6 +34,7 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
             return Err(e);
         }
     };
+    let mut count = 1;
 
     loop {
         let res = match receiver.recv().await {
@@ -44,7 +45,11 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
             Some(res) => res,
             None => return Ok(()),
         };
-        println!("parent: {}, root: {}, slot: {}", parent, root, slot);
+        count = count + 1;
+        println!(
+            "parent: {}, root: {}, slot: {}, count: {}",
+            parent, root, slot, count
+        );
 
         session
             .text(
