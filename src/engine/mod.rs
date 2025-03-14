@@ -259,7 +259,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                         break;
                     }
                 };
-                if next_block_read.block_height > initial_slot + 100 {
+                if next_block_read.block_height > initial_slot + 50 {
                     match tx.send(None).await {
                         Ok(_) => {}
                         Err(_) => {}
