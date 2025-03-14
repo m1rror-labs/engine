@@ -56,9 +56,9 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
                   "method": "slotNotification",
                   "params": {
                     "result": {
-                      "parent": parent,
-                      "root": root,
-                      "slot": slot
+                      "parent": parent-1,
+                      "root": root-1,
+                      "slot": slot-1
                     },
                     "subscription": sub_id
                   }
