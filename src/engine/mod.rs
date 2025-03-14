@@ -152,6 +152,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
     fn slot_unsubscribe(&self, req_id: u32) -> Result<(), String>;
 }
 
+#[derive(Clone)]
 pub struct SvmEngine<T: Storage + Clone + 'static> {
     rent: Rent,
     fee_structure: FeeStructure,
@@ -223,14 +224,14 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     ) -> Result<mpsc::Receiver<Option<(u64, u64, u64)>>, String> {
         let (mut tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
         let mut interval = time::interval(Duration::from_millis(400));
-        let latest_block = match self.get_latest_block(id) {
+        let latest_block = match self.latest_blockhash(id) {
             Ok(slot) => slot,
             Err(e) => return Err(e),
         };
         let mut current_slot = latest_block.block_height;
         self.subscribed_slots.try_write().unwrap().push(req_id);
         let sub_slots = self.subscribed_slots.clone();
-        let stg = self.storage.clone();
+        let self_clone = self.clone();
         rt::spawn(async move {
             loop {
                 interval.tick().await;
@@ -245,7 +246,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     tx.close_channel();
                     break;
                 }
-                let next_block_read = match stg.get_latest_block(id) {
+                let next_block_read = match self_clone.latest_blockhash(id) {
                     Ok(slot) => slot,
                     Err(_) => {
                         match tx.send(None).await {
@@ -264,9 +265,9 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     current_slot = next_block_read.block_height;
                     if tx
                         .send(Some((
-                            next_block_read.parent_slot - 2,
-                            next_block_read.parent_slot - 2,
-                            next_block_read.block_height - 2,
+                            next_block_read.parent_slot - 10,
+                            next_block_read.parent_slot - 10,
+                            next_block_read.block_height - 10,
                         )))
                         .await
                         .is_err()
