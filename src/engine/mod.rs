@@ -3,7 +3,6 @@ use blocks::{Block, Blockchain};
 use builtins::BUILTINS;
 use chrono::{DateTime, Utc};
 use engine::TransactionProcessor;
-use futures::{channel::mpsc, SinkExt};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
@@ -52,6 +51,7 @@ use std::{
     time::Duration,
 }; // Add this import at the top of your file
 use tokens::TokenAmount;
+use tokio::sync::mpsc;
 use transactions::{TransactionMeta, TransactionMetadata};
 use uuid::Uuid;
 
@@ -222,7 +222,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         id: Uuid,
         req_id: u32,
     ) -> Result<mpsc::Receiver<Option<(u64, u64, u64)>>, String> {
-        let (mut tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
+        let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
         let mut interval = time::interval(Duration::from_millis(400));
         let latest_block = match self.latest_blockhash(id) {
             Ok(slot) => slot,
@@ -238,12 +238,8 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 if !sub_slots.try_read().unwrap().contains(&req_id) {
                     match tx.send(None).await {
                         Ok(_) => {}
-                        Err(_) => {
-                            tx.close_channel();
-                            break;
-                        }
+                        Err(_) => {}
                     };
-                    tx.close_channel();
                     break;
                 }
                 let next_block_read = match self_clone.latest_blockhash(id) {
@@ -251,12 +247,8 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     Err(_) => {
                         match tx.send(None).await {
                             Ok(_) => {}
-                            Err(_) => {
-                                tx.close_channel();
-                                break;
-                            }
+                            Err(_) => {}
                         };
-                        tx.close_channel();
                         break;
                     }
                 };
@@ -265,9 +257,9 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     current_slot = next_block_read.block_height;
                     if tx
                         .send(Some((
-                            next_block_read.parent_slot - 10,
-                            next_block_read.parent_slot - 10,
-                            next_block_read.block_height - 10,
+                            next_block_read.parent_slot - 2,
+                            next_block_read.parent_slot - 2,
+                            next_block_read.block_height - 2,
                         )))
                         .await
                         .is_err()

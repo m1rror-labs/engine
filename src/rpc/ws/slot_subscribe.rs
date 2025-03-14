@@ -36,14 +36,7 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
     };
 
     loop {
-        let res = match receiver.try_next() {
-            Ok(res) => res,
-            Err(e) => {
-                println!("Error receiving value: {:?}", e);
-                return Ok(());
-            }
-        };
-        let res = match res {
+        let res = match receiver.recv().await {
             Some(res) => res,
             None => return Ok(()),
         };
