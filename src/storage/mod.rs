@@ -110,9 +110,10 @@ pub struct PgStorage {
 impl PgStorage {
     pub fn new(database_url: &str) -> Self {
         let manager = ConnectionManager::<PgConnection>::new(database_url);
-        let pool = r2d2::Pool::builder()
-            .build(manager)
-            .expect("Failed to create pool.");
+        let pool = match r2d2::Pool::builder().build(manager) {
+            Ok(pool) => pool,
+            Err(e) => panic!("Failed to create pool: {}", e),
+        };
         PgStorage { pool }
     }
 

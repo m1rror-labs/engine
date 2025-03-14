@@ -3,6 +3,8 @@ use blocks::{Block, Blockchain};
 use builtins::BUILTINS;
 use chrono::{DateTime, Utc};
 use engine::TransactionProcessor;
+use futures::{channel::mpsc, SinkExt};
+use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
 use solana_program::{last_restart_slot::LastRestartSlot, pubkey};
@@ -43,7 +45,12 @@ use solana_sdk::{
 use spl::load_spl_programs;
 use spl_token::state::Account as SplAccount;
 use spl_token::state::Mint;
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration}; // Add this import at the top of your file
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::{Arc, RwLock},
+    time::Duration,
+}; // Add this import at the top of your file
 use tokens::TokenAmount;
 use transactions::{TransactionMeta, TransactionMetadata};
 use uuid::Uuid;
@@ -137,6 +144,12 @@ pub trait SVM<T: Storage + Clone + 'static> {
         signature: &Signature,
         commitment: TransactionConfirmationStatus,
     ) -> Result<u64, String>;
+    fn slot_subscribe(
+        &self,
+        id: Uuid,
+        req_id: u32,
+    ) -> Result<mpsc::Receiver<Option<(u64, u64, u64)>>, String>;
+    fn slot_unsubscribe(&self, req_id: u32) -> Result<(), String>;
 }
 
 pub struct SvmEngine<T: Storage + Clone + 'static> {
@@ -146,6 +159,7 @@ pub struct SvmEngine<T: Storage + Clone + 'static> {
     sysvar_cache: SysvarCache,
     pub storage: T,
     transaction_processor: Arc<TransactionProcessor<T>>,
+    subscribed_slots: Arc<RwLock<Vec<u32>>>,
 }
 
 impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
@@ -164,6 +178,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             sysvar_cache: SysvarCache::default(),
             storage: storage,
             transaction_processor: tx_processor,
+            subscribed_slots: Arc::new(RwLock::new(Vec::new())),
         };
         engine.set_sysvars();
 
@@ -199,6 +214,80 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 }
             }
         }
+    }
+
+    fn slot_subscribe(
+        &self,
+        id: Uuid,
+        req_id: u32,
+    ) -> Result<mpsc::Receiver<Option<(u64, u64, u64)>>, String> {
+        let (mut tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
+        let mut interval = time::interval(Duration::from_millis(400));
+        let latest_block = match self.get_latest_block(id) {
+            Ok(slot) => slot,
+            Err(e) => return Err(e),
+        };
+        let mut current_slot = latest_block.block_height;
+        self.subscribed_slots.try_write().unwrap().push(req_id);
+        let sub_slots = self.subscribed_slots.clone();
+        let stg = self.storage.clone();
+        rt::spawn(async move {
+            loop {
+                interval.tick().await;
+                if !sub_slots.try_read().unwrap().contains(&req_id) {
+                    match tx.send(None).await {
+                        Ok(_) => {}
+                        Err(_) => {
+                            tx.close_channel();
+                            break;
+                        }
+                    };
+                    tx.close_channel();
+                    break;
+                }
+                let next_block_read = match stg.get_latest_block(id) {
+                    Ok(slot) => slot,
+                    Err(_) => {
+                        match tx.send(None).await {
+                            Ok(_) => {}
+                            Err(_) => {
+                                tx.close_channel();
+                                break;
+                            }
+                        };
+                        tx.close_channel();
+                        break;
+                    }
+                };
+
+                if next_block_read.block_height > current_slot {
+                    current_slot = next_block_read.block_height;
+                    if tx
+                        .send(Some((
+                            next_block_read.parent_slot,
+                            next_block_read.parent_slot,
+                            next_block_read.block_height,
+                        )))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+    fn slot_unsubscribe(&self, req_id: u32) -> Result<(), String> {
+        let mut sub_slots = self.subscribed_slots.try_write().unwrap();
+        let (idx, _) = match sub_slots.iter().find_position(|val| **val == req_id) {
+            Some(val) => val,
+            None => return Err("Subscription ID not found".to_string()),
+        };
+
+        sub_slots.remove(idx);
+        Ok(())
     }
 
     fn create_blockchain(

@@ -53,19 +53,39 @@ pub async fn rpc_ws(
                     match res {
                         Ok(_) => {}
                         Err(e) => {
-                            session.text(e).await.unwrap();
+                            match session.text(e).await {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    println!("{:?}", e);
+                                }
+                            }
                         }
                     }
                 }
                 Ok(AggregatedMessage::Binary(bin)) => {
-                    session.binary(bin).await.unwrap();
+                    match session.binary(bin).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            println!("{:?}", e);
+                        }
+                    }
                 }
                 Ok(AggregatedMessage::Ping(msg)) => {
-                    session.pong(&msg).await.unwrap();
+                    match session.pong(&msg).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            println!("{:?}", e);
+                        }
+                    }
                 }
                 Ok(AggregatedMessage::Close(reason)) => {
                     println!("Client disconnected: {:?}", reason);
-                    session.close(reason).await.unwrap();
+                    match session.close(reason).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            println!("{:?}", e);
+                        }
+                    };
                     break;
                 }
                 _ => {}

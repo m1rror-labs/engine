@@ -3,8 +3,12 @@ use actix_ws::Session;
 use futures::TryFutureExt;
 use serde::Deserialize;
 use signature_subscribe::signature_subscribe;
+use slot_subscribe::slot_subscribe;
+use slot_unsubscribe::slot_unsubscribe;
 use uuid::Uuid;
 pub mod signature_subscribe;
+pub mod slot_subscribe;
+pub mod slot_unsubscribe;
 
 #[derive(Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -138,17 +142,9 @@ pub async fn handle_ws_request<T: Storage + Clone + 'static>(
         }
         RpcMethod::SignatureSubscribe => signature_subscribe(id, &req, session, svm).await?,
         RpcMethod::SignatureUnsubscribe => {
-            signature_subscribe(id, &req, session.clone(), svm).await?
+            signature_subscribe(id, &req, session.clone(), svm).await? //TODO: This should be its own function
         }
-        RpcMethod::SlotSubscribe => {
-            session
-                .close(Some(actix_ws::CloseReason {
-                    code: actix_ws::CloseCode::Normal,
-                    description: Some("SlotSubscribe not implemented".into()),
-                }))
-                .map_err(|e| e.to_string())
-                .await?;
-        }
+        RpcMethod::SlotSubscribe => slot_subscribe(id, &req, session, svm).await?,
         RpcMethod::SlotsUpdatesSubscribe => {
             session
                 .close(Some(actix_ws::CloseReason {
@@ -167,15 +163,7 @@ pub async fn handle_ws_request<T: Storage + Clone + 'static>(
                 .map_err(|e| e.to_string())
                 .await?;
         }
-        RpcMethod::SlotUnsubscribe => {
-            session
-                .close(Some(actix_ws::CloseReason {
-                    code: actix_ws::CloseCode::Normal,
-                    description: Some("SlotUnsubscribe not implemented".into()),
-                }))
-                .map_err(|e| e.to_string())
-                .await?;
-        }
+        RpcMethod::SlotUnsubscribe => slot_unsubscribe(&req, session, svm).await?,
         RpcMethod::VoteSubscribe => {
             session
                 .close(Some(actix_ws::CloseReason {
