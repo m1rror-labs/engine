@@ -142,6 +142,7 @@ pub async fn handle_ws_request<T: Storage + Clone + 'static>(
         }
         RpcMethod::SignatureSubscribe => signature_subscribe(id, &req, session, svm).await?,
         RpcMethod::SignatureUnsubscribe => {
+            println!("SignatureUnsubscribe");
             signature_subscribe(id, &req, session.clone(), svm).await? //TODO: This should be its own function
         }
         RpcMethod::SlotSubscribe => slot_subscribe(id, &req, session, svm).await?,
