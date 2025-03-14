@@ -53,7 +53,20 @@ pub async fn rpc_ws(
                     match res {
                         Ok(_) => {}
                         Err(e) => {
-                            match session.text(e).await {
+                            match session
+                                .text(
+                                    serde_json::json!({
+                                        "jsonrpc": "2.0",
+                                        "id": serde_json::Value::Null,
+                                        "error": {
+                                            "code": -32603,
+                                            "message": e
+                                        }
+                                    })
+                                    .to_string(),
+                                )
+                                .await
+                            {
                                 Ok(_) => {}
                                 Err(e) => {
                                     println!("{:?}", e);
@@ -62,22 +75,18 @@ pub async fn rpc_ws(
                         }
                     }
                 }
-                Ok(AggregatedMessage::Binary(bin)) => {
-                    match session.binary(bin).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            println!("{:?}", e);
-                        }
+                Ok(AggregatedMessage::Binary(bin)) => match session.binary(bin).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("{:?}", e);
                     }
-                }
-                Ok(AggregatedMessage::Ping(msg)) => {
-                    match session.pong(&msg).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            println!("{:?}", e);
-                        }
+                },
+                Ok(AggregatedMessage::Ping(msg)) => match session.pong(&msg).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("{:?}", e);
                     }
-                }
+                },
                 Ok(AggregatedMessage::Close(reason)) => {
                     println!("Client disconnected: {:?}", reason);
                     match session.close(reason).await {

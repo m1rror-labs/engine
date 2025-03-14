@@ -151,7 +151,6 @@ impl DbTransactionInstruction {
         &self,
         keys: Vec<DbTransactionAccountKey>,
     ) -> solana_sdk::instruction::Instruction {
-        println!("to_ix {:?}", self);
         let accounts = self
             .accounts
             .iter()

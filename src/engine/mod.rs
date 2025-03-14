@@ -201,6 +201,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         signature: &Signature,
         commitment: TransactionConfirmationStatus,
     ) -> Result<u64, String> {
+        println!("Subscribing to signature: {:?}", signature);
         let mut interval = time::interval(Duration::from_millis(400));
         loop {
             interval.tick().await;
@@ -210,7 +211,12 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             }
             if let Some((_, _, status)) = tx {
                 println!("Transaction status: {:?}", status);
-                if status.confirmation_status == Some(commitment.clone()) {
+                println!("Commitment: {:?}", commitment);
+                if status.confirmation_status == None {
+                    continue;
+                }
+                let confirmation_status = status.confirmation_status.unwrap();
+                if status_is_greater(&commitment, &confirmation_status) {
                     return Ok(status.slot);
                 }
             }
@@ -1042,5 +1048,30 @@ pub fn tx_confirmation_status(time: chrono::DateTime<Utc>) -> TransactionConfirm
         TransactionConfirmationStatus::Finalized
     } else {
         TransactionConfirmationStatus::Processed
+    }
+}
+
+pub fn status_is_greater(
+    status: &TransactionConfirmationStatus,
+    other: &TransactionConfirmationStatus,
+) -> bool {
+    match status {
+        TransactionConfirmationStatus::Processed => {
+            matches!(
+                other,
+                TransactionConfirmationStatus::Confirmed
+                    | TransactionConfirmationStatus::Finalized
+                    | TransactionConfirmationStatus::Processed
+            )
+        }
+        TransactionConfirmationStatus::Confirmed => {
+            matches!(
+                other,
+                TransactionConfirmationStatus::Finalized | TransactionConfirmationStatus::Confirmed
+            )
+        }
+        TransactionConfirmationStatus::Finalized => {
+            matches!(other, TransactionConfirmationStatus::Finalized)
+        }
     }
 }

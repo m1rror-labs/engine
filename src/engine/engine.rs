@@ -221,7 +221,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 .iter()
                 .map(|k| {
                     let account = post_accounts.iter().find(|(key, _)| k == key);
-                    println!("Account: {:?}", account);
                     match account {
                         Some((_, account)) => (k.to_owned().to_owned(), account.to_owned()),
                         None => (k.to_owned().to_owned(), AccountSharedData::default()),
