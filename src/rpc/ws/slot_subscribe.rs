@@ -45,8 +45,6 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
             None => return Ok(()),
         };
 
-        println!("parent: {:?}, root: {:?}, slot: {:?}", parent, root, slot);
-
         session
             .text(
                 serde_json::json!({
