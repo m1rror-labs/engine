@@ -264,9 +264,9 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     current_slot = next_block_read.block_height;
                     if tx
                         .send(Some((
-                            next_block_read.parent_slot,
-                            next_block_read.parent_slot,
-                            next_block_read.block_height,
+                            next_block_read.parent_slot - 2,
+                            next_block_read.parent_slot - 2,
+                            next_block_read.block_height - 2,
                         )))
                         .await
                         .is_err()
