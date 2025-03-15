@@ -210,7 +210,7 @@ pub async fn create_blockchain(
         Err(e) => return HttpResponse::InternalServerError().json(e.to_string()),
     };
 
-    if existing_blockchains.len() >= 10 {
+    if team.default_expiry == None && existing_blockchains.len() >= 10 {
         return HttpResponse::BadRequest().json(json!({
             "message": "You can only create 10 blockchains per team"
         }));
