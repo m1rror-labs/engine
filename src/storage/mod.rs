@@ -72,6 +72,7 @@ pub trait Storage {
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
 
     fn get_blockchain(&self, id: Uuid) -> Result<Blockchain, String>;
+    fn get_expired_blockchains(&self) -> Result<Vec<Blockchain>, String>;
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
     fn set_blockchain(&self, blockchain: &Blockchain) -> Result<Uuid, String>;
@@ -146,6 +147,14 @@ impl Storage for PgStorage {
             .first::<DbBlockchain>(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(blockchain.to_blockchain())
+    }
+    fn get_expired_blockchains(&self) -> Result<Vec<Blockchain>, String> {
+        let mut conn = self.get_connection()?;
+        let blockchains = crate::schema::blockchains::table
+            .filter(crate::schema::blockchains::expiry.lt(chrono::Utc::now().naive_utc()))
+            .load::<DbBlockchain>(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(blockchains.into_iter().map(|b| b.to_blockchain()).collect())
     }
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String> {
         let mut conn = self.get_connection()?;

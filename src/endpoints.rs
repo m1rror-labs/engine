@@ -237,6 +237,24 @@ pub async fn create_blockchain(
     }
 }
 
+#[post("/blockchains/expire")]
+pub async fn expire_blockchains(svm: web::Data<Arc<SvmEngine<PgStorage>>>) -> impl Responder {
+    let expired_blockchains = match svm.storage.get_expired_blockchains() {
+        Ok(blockchains) => blockchains,
+        Err(e) => return HttpResponse::InternalServerError().json(e.to_string()),
+    };
+
+    for blockchain in expired_blockchains {
+        if let Err(e) = svm.delete_blockchain(blockchain.id) {
+            println!("Error deleting blockchain {}: {}", blockchain.id, e);
+        }
+    }
+
+    HttpResponse::Ok().json(json!({
+        "message": "Expired blockchains deleted successfully"
+    }))
+}
+
 #[get("/blockchains")]
 pub async fn get_blockchains(
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
