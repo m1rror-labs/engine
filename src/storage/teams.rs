@@ -9,6 +9,7 @@ pub struct Team {
     pub id: Uuid,
     pub created_at: chrono::NaiveDateTime,
     pub name: String,
+    pub default_expiry: Option<i32>, // Default expiry in seconds
 }
 
 #[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone)]

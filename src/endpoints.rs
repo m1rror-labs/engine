@@ -15,7 +15,7 @@ use crate::{
         rpc::{handle_request, RpcMethod, RpcRequest},
         ws::handle_ws_request,
     },
-    storage::{PgStorage, Storage},
+    storage::{teams::Team, PgStorage, Storage},
 };
 
 pub async fn rpc_reqest(
@@ -196,7 +196,7 @@ pub async fn create_blockchain(
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     http_req: HttpRequest,
 ) -> impl Responder {
-    let team_id = match get_team_id(svm.clone(), http_req) {
+    let team = match get_team(svm.clone(), http_req) {
         Ok(team_id) => team_id,
         Err(e) => {
             return HttpResponse::Unauthorized().json(json!({
@@ -205,7 +205,7 @@ pub async fn create_blockchain(
         }
     };
 
-    let existing_blockchains = match svm.get_blockchains(team_id) {
+    let existing_blockchains = match svm.get_blockchains(team.id) {
         Ok(blockchains) => blockchains,
         Err(e) => return HttpResponse::InternalServerError().json(e.to_string()),
     };
@@ -216,7 +216,13 @@ pub async fn create_blockchain(
         }));
     }
 
-    let id = svm.create_blockchain(team_id, None);
+    let expiry = match team.default_expiry {
+        Some(expiry) => {
+            Some(chrono::Utc::now().naive_utc() + chrono::Duration::seconds(expiry as i64))
+        }
+        None => None,
+    };
+    let id = svm.create_blockchain(team.id, None, expiry);
     match id {
         Ok(id) => {
             let mut base_url = "https://rpc.mirror.ad/rpc/";
@@ -347,6 +353,25 @@ fn get_team_id(
     match Uuid::parse_str(api_key) {
         Ok(api_key) => match svm.storage.get_team_from_api_key(api_key) {
             Ok(team) => Ok(team.id),
+            Err(_) => Err("Invalid API key".to_string()),
+        },
+        Err(_) => Err("Invalid API key".to_string()),
+    }
+}
+
+fn get_team(
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    http_req: HttpRequest,
+) -> Result<Team, String> {
+    let api_key = http_req
+        .headers()
+        .get("api_key")
+        .and_then(|header_value| header_value.to_str().ok())
+        .unwrap_or("");
+
+    match Uuid::parse_str(api_key) {
+        Ok(api_key) => match svm.storage.get_team_from_api_key(api_key) {
+            Ok(team) => Ok(team),
             Err(_) => Err("Invalid API key".to_string()),
         },
         Err(_) => Err("Invalid API key".to_string()),

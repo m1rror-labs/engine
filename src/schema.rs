@@ -127,6 +127,7 @@ table! {
         id -> Uuid,
         created_at -> Timestamp,
         name -> Text,
+        default_expiry -> Nullable<Integer>,
     }
 }
 
