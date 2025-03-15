@@ -196,7 +196,7 @@ pub async fn create_blockchain(
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     http_req: HttpRequest,
 ) -> impl Responder {
-    let team = match get_team(svm.clone(), http_req) {
+    let team = match get_team(svm.clone(), http_req.clone()) {
         Ok(team_id) => team_id,
         Err(e) => {
             return HttpResponse::Unauthorized().json(json!({
@@ -216,13 +216,29 @@ pub async fn create_blockchain(
         }));
     }
 
+    let mut label = None;
+    if team.default_expiry.is_some() {
+        let user_id = match http_req.headers().get("user_id"){
+            Some(user_id) => match user_id.to_str() {
+                Ok(user_id) => user_id.to_string(),
+                Err(_) => return HttpResponse::BadRequest().json(json!({
+                    "message": "Invalid user_id header"
+                })),
+            },
+            None => return HttpResponse::BadRequest().json(json!({
+                "message": "Missing user_id header"
+            })),
+        };
+        label = Some(user_id);
+    }
+
     let expiry = match team.default_expiry {
         Some(expiry) => {
             Some(chrono::Utc::now().naive_utc() + chrono::Duration::seconds(expiry as i64))
         }
         None => None,
     };
-    let id = svm.create_blockchain(team.id, None, expiry);
+    let id = svm.create_blockchain(team.id, None,label, expiry);
     match id {
         Ok(id) => {
             let mut base_url = "https://rpc.mirror.ad/rpc/";

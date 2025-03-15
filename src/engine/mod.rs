@@ -73,6 +73,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
         &self,
         team_id: Uuid,
         airdrop_keypair: Option<Keypair>,
+        label: Option<String>,
         expiry: Option<chrono::NaiveDateTime>,
     ) -> Result<Uuid, String>;
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
@@ -302,6 +303,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         &self,
         team_id: Uuid,
         airdrop_keypair: Option<Keypair>,
+        label: Option<String>,
         expiry: Option<chrono::NaiveDateTime>,
     ) -> Result<Uuid, String> {
         let keypair = match airdrop_keypair {
@@ -314,7 +316,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             created_at: Utc::now().naive_utc(),
             airdrop_keypair: keypair.insecure_clone(),
             team_id,
-            label: None,
+            label: label,
             expiry: expiry,
         };
 
