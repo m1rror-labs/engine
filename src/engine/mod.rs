@@ -321,58 +321,72 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         };
 
         let id = self.storage.set_blockchain(&blockchain)?;
-
-        let mut hasher = Sha256::new();
-        hasher.update(id.as_bytes());
-        let hash_array = hasher.finalize();
-        let hash = Hash::new_from_array(hash_array.into());
-        self.storage.set_block(
-            id,
-            &Block {
-                blockhash: hash,
-                block_time: 0,
-                previous_blockhash: Hash::default(),
-                block_height: 0,
-                parent_slot: 0,
-                transactions: vec![],
-            },
-        )?;
-
-        self.save_sysvars(id)?;
-
-        self.storage.set_account(
-            id,
-            &keypair.pubkey(),
-            Account {
-                lamports: 1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL),
-                data: vec![],
-                owner: system_program::id(),
-                executable: false,
-                rent_epoch: 100000000000,
-            },
-            None,
-        )?;
-        // self.storage.set_account(
-        //     id,
-        //     &sysvar::id(),
-        //     Account {
-        //         lamports: 1200000000,
-        //         data: vec![],
-        //         owner: system_program::id(),
-        //         executable: false,
-        //         rent_epoch: 100000000000,
-        //     },
-        //     None,
-        // )?;
-        BUILTINS.iter().for_each(|builtint| {
-            let mut account: Account =
-                native_loader::create_loadable_account_for_test(builtint.name).into();
-            account.rent_epoch = 1000000;
-            self.storage
-                .set_account(id, &builtint.program_id, account, None)
-                .expect("Failed to set builtin account");
+        let self_clone = self.clone();
+        rt::spawn(async move {
+            let mut hasher = Sha256::new();
+            hasher.update(id.as_bytes());
+            let hash_array = hasher.finalize();
+            let hash = Hash::new_from_array(hash_array.into());
+            match self_clone.storage.set_block(
+                id,
+                &Block {
+                    blockhash: hash,
+                    block_time: 0,
+                    previous_blockhash: Hash::default(),
+                    block_height: 0,
+                    parent_slot: 0,
+                    transactions: vec![],
+                },
+            ) {
+                Ok(_) => {}
+                Err(e) => {
+                    println!("Error setting genesis block: {:?}", e);
+                    return;
+                }
+            };
+            match self_clone.save_sysvars(id){
+                Ok(_) => {}
+                Err(e) => {
+                    println!("Error saving sysvars: {:?}", e);
+                    return;
+                }
+            };
+            match self_clone.storage.set_account(
+                id,
+                &keypair.pubkey(),
+                Account {
+                    lamports: 1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL),
+                    data: vec![],
+                    owner: system_program::id(),
+                    executable: false,
+                    rent_epoch: 100000000000,
+                },
+                None,
+            ){
+                Ok(_) => {}
+                Err(e) => {
+                    println!("Error setting airdrop account: {:?}", e);
+                    return;
+                }
+            };
+            BUILTINS.iter().for_each(|builtint| {
+                let mut account: Account =
+                    native_loader::create_loadable_account_for_test(builtint.name).into();
+                account.rent_epoch = 1000000;
+                self_clone.storage
+                    .set_account(id, &builtint.program_id, account, None)
+                    .expect("Failed to set builtin account");
+            });
+            match load_spl_programs(&self_clone, id){
+                Ok(_) => {}
+                Err(e) => {
+                    println!("Error loading SPL programs: {:?}", e);
+                    return;
+                }
+            };
         });
-        load_spl_programs(self, id)?;
+
+       
 
         Ok(id)
     }
