@@ -229,6 +229,11 @@ pub async fn create_blockchain(
                 "message": "Missing user_id header"
             })),
         };
+        if user_id == "" {
+            return HttpResponse::BadRequest().json(json!({
+                "message": "user_id header cannot be empty"
+            }));
+        }
         label = Some(user_id);
     }
 
