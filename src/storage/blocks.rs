@@ -14,6 +14,7 @@ pub struct DbBlockchain {
     pub airdrop_keypair: Vec<u8>,
     pub team_id: Uuid,
     pub label: Option<String>,
+    pub expiry: Option<chrono::NaiveDateTime>,
 }
 
 impl DbBlockchain {
@@ -23,6 +24,8 @@ impl DbBlockchain {
             created_at: self.created_at,
             airdrop_keypair: Keypair::from_bytes(self.airdrop_keypair.as_slice()).unwrap(),
             team_id: self.team_id,
+            label: self.label,
+            expiry: self.expiry,
         }
     }
 }

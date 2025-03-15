@@ -163,7 +163,8 @@ impl Storage for PgStorage {
             created_at: blockchain.created_at,
             airdrop_keypair: blockchain.airdrop_keypair.to_bytes().to_vec(),
             team_id: blockchain.team_id,
-            label: None,
+            label: blockchain.label.clone(),
+            expiry: blockchain.expiry,
         };
         diesel::insert_into(crate::schema::blockchains::table)
             .values(&db_blockchain)

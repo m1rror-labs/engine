@@ -35,6 +35,7 @@ table! {
         airdrop_keypair -> Bytea,
         team_id -> Uuid,
         label -> Nullable<Text>,
+        expiry -> Nullable<Timestamp>,
     }
 }
 

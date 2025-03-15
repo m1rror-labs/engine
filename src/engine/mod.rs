@@ -312,6 +312,8 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             created_at: Utc::now().naive_utc(),
             airdrop_keypair: keypair.insecure_clone(),
             team_id,
+            label: None,
+            expiry: None,
         };
 
         let id = self.storage.set_blockchain(&blockchain)?;
