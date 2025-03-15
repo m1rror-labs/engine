@@ -27,6 +27,7 @@ COPY --from=builder /usr/src/myapp/target/release/mockchain-engine .
 
 # Expose the port that the application will run on
 EXPOSE 8080
+EXPOSE 9001
 
 # Set the entrypoint to run the application
 CMD ["./mockchain-engine"]

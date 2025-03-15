@@ -71,7 +71,7 @@ async fn main() -> std::io::Result<()> {
             .service(load_program)
     })
     .bind(("0.0.0.0", 8899))?
-    // .bind(("[::1]",9001))?
+    .bind(("::",9001))?
     .run()
     .await
 }
