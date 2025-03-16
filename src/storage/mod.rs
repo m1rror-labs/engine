@@ -300,24 +300,27 @@ impl Storage for PgStorage {
             .iter()
             .map(|(address, account)| DbAccount::from_account(address, account, None, id))
             .collect();
-        diesel::insert_into(crate::schema::accounts::table)
-            .values(db_accounts)
-            .on_conflict((
-                crate::schema::accounts::address,
-                crate::schema::accounts::blockchain,
-            ))
-            .do_update()
-            .set((
-                crate::schema::accounts::lamports.eq(excluded(crate::schema::accounts::lamports)),
-                crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
-                crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
-                crate::schema::accounts::executable
-                    .eq(excluded(crate::schema::accounts::executable)),
-                crate::schema::accounts::rent_epoch
-                    .eq(excluded(crate::schema::accounts::rent_epoch)),
-            ))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
+        conn.transaction::<_, diesel::result::Error, _>(|conn| {
+            diesel::insert_into(crate::schema::accounts::table)
+                .values(db_accounts)
+                .on_conflict((
+                    crate::schema::accounts::address,
+                    crate::schema::accounts::blockchain,
+                ))
+                .do_update()
+                .set((
+                    crate::schema::accounts::lamports
+                        .eq(excluded(crate::schema::accounts::lamports)),
+                    crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
+                    crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
+                    crate::schema::accounts::executable
+                        .eq(excluded(crate::schema::accounts::executable)),
+                    crate::schema::accounts::rent_epoch
+                        .eq(excluded(crate::schema::accounts::rent_epoch)),
+                ))
+                .execute(conn)
+        })
+        .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -422,37 +425,35 @@ impl Storage for PgStorage {
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String> {
         let mut conn = self.get_connection()?;
-        // save transaction
-        diesel::insert_into(crate::schema::transactions::table)
-            .values(DbTransaction::from_transaction(id, tx))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
 
-        // save transaction account keys
-        diesel::insert_into(crate::schema::transaction_account_keys::table)
-            .values(DbTransactionAccountKey::from_transaction(tx))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
-        // save transaction instructions
-        diesel::insert_into(crate::schema::transaction_instructions::table)
-            .values(DbTransactionInstruction::from_transaction(tx))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
-        // save transaction log messages
-        diesel::insert_into(crate::schema::transaction_log_messages::table)
-            .values(DbTransactionLogMessage::from_transaction(tx))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
-        // save transaction meta
-        diesel::insert_into(crate::schema::transaction_meta::table)
-            .values(DbTransactionMeta::from_transaction(tx))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
-        // save transaction signatures
-        diesel::insert_into(crate::schema::transaction_signatures::table)
-            .values(DbTransactionSignature::from_transaction(tx))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
+        conn.transaction::<_, diesel::result::Error, _>(|conn| {
+            diesel::insert_into(crate::schema::transactions::table)
+                .values(DbTransaction::from_transaction(id, tx))
+                .execute(conn)?;
+
+            diesel::insert_into(crate::schema::transaction_account_keys::table)
+                .values(DbTransactionAccountKey::from_transaction(tx))
+                .execute(conn)?;
+
+            diesel::insert_into(crate::schema::transaction_instructions::table)
+                .values(DbTransactionInstruction::from_transaction(tx))
+                .execute(conn)?;
+
+            diesel::insert_into(crate::schema::transaction_log_messages::table)
+                .values(DbTransactionLogMessage::from_transaction(tx))
+                .execute(conn)?;
+
+            diesel::insert_into(crate::schema::transaction_meta::table)
+                .values(DbTransactionMeta::from_transaction(tx))
+                .execute(conn)?;
+
+            diesel::insert_into(crate::schema::transaction_signatures::table)
+                .values(DbTransactionSignature::from_transaction(tx))
+                .execute(conn)?;
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+        // save transaction
 
         Ok(())
     }
