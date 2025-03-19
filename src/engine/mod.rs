@@ -609,18 +609,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         if res == None {
             return Ok(None);
         }
-        let (tx, slot, mut tx_meta, tx_res, created_at) = res.unwrap();
-        tx_meta.post_balances = tx_meta
-            .post_balances
-            .into_iter()
-            .enumerate()
-            .map(|(idx, b)| {
-                if b == 0 {
-                    return tx_meta.pre_balances[idx];
-                }
-                return b;
-            })
-            .collect();
+        let (tx, slot, tx_meta, tx_res, created_at) = res.unwrap();
 
         Ok(Some((
             tx,

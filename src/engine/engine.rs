@@ -223,7 +223,13 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                     let account = post_accounts.iter().find(|(key, _)| k == key);
                     match account {
                         Some((_, account)) => (k.to_owned().to_owned(), account.to_owned()),
-                        None => (k.to_owned().to_owned(), AccountSharedData::default()),
+                        None => match accounts_db.get_account(k) {
+                            Some(account) => (k.to_owned().to_owned(), account.to_owned()),
+                            None => {
+                                println!("Account not found for key {}", k);
+                                (k.to_owned().to_owned(), AccountSharedData::default())
+                            }
+                        },
                     }
                 })
                 .collect(),
