@@ -344,7 +344,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     return;
                 }
             };
-            match self_clone.save_sysvars(id){
+            match self_clone.save_sysvars(id) {
                 Ok(_) => {}
                 Err(e) => {
                     println!("Error saving sysvars: {:?}", e);
@@ -362,7 +362,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     rent_epoch: 100000000000,
                 },
                 None,
-            ){
+            ) {
                 Ok(_) => {}
                 Err(e) => {
                     println!("Error setting airdrop account: {:?}", e);
@@ -373,11 +373,12 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 let mut account: Account =
                     native_loader::create_loadable_account_for_test(builtint.name).into();
                 account.rent_epoch = 1000000;
-                self_clone.storage
+                self_clone
+                    .storage
                     .set_account(id, &builtint.program_id, account, None)
                     .expect("Failed to set builtin account");
             });
-            match load_spl_programs(&self_clone, id){
+            match load_spl_programs(&self_clone, id) {
                 Ok(_) => {}
                 Err(e) => {
                     println!("Error loading SPL programs: {:?}", e);
@@ -385,8 +386,6 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 }
             };
         });
-
-       
 
         Ok(id)
     }
@@ -610,7 +609,18 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         if res == None {
             return Ok(None);
         }
-        let (tx, slot, tx_meta, tx_res, created_at) = res.unwrap();
+        let (tx, slot, mut tx_meta, tx_res, created_at) = res.unwrap();
+        tx_meta.post_balances = tx_meta
+            .post_balances
+            .into_iter()
+            .enumerate()
+            .map(|(idx, b)| {
+                if b == 0 {
+                    return tx_meta.pre_balances[idx];
+                }
+                return b;
+            })
+            .collect();
 
         Ok(Some((
             tx,
