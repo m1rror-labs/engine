@@ -66,6 +66,7 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
                         Err(e) => return e,
                     };
 
+                    // TODO: This is not optimized, should optimize this
                     let mint_account = match svm.get_account(id, &ata.mint) {
                         Ok(mint) => match mint {
                             Some(mint) => mint,
