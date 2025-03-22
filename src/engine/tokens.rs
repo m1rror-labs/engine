@@ -41,7 +41,6 @@ pub fn collect_token_balances<T: Storage + Clone + 'static>(
     if !has_token_program {
         return None;
     }
-    println!("collect_token_balances: {:?}", tx.message().account_keys());
 
     let mut mint_decimals: HashMap<Pubkey, u8> = HashMap::new();
 
@@ -52,36 +51,44 @@ pub fn collect_token_balances<T: Storage + Clone + 'static>(
             continue;
         }
 
-        let pre_account = accounts_db.get_account(account_id).unwrap_or_default();
+        let pre_account = accounts_db.get_account(account_id);
         let post_account = post_accounts
             .iter()
             .find(|(pubkey, _)| pubkey == account_id)
-            .map(|(_, account)| account.clone())
-            .unwrap_or_default();
+            .map(|(_, account)| account.clone());
 
-        if let Some(pre_balance) = collect_token_balance_from_account(
-            id,
-            pre_account,
-            storage.clone(),
-            index,
-            &mut mint_decimals,
-        ) {
-            pre_balances.push(pre_balance);
-        }
-        if let Some(post_balance) = collect_token_balance_from_account(
-            id,
-            post_account,
-            storage.clone(),
-            index,
-            &mut mint_decimals,
-        ) {
-            post_balances.push(post_balance);
-        }
+        match pre_account {
+            Some(pre_account) => {
+                if let Some(pre_balance) = collect_token_balance_from_account(
+                    id,
+                    pre_account,
+                    storage.clone(),
+                    post_accounts.clone(),
+                    index,
+                    &mut mint_decimals,
+                ) {
+                    pre_balances.push(pre_balance);
+                }
+            }
+            None => {}
+        };
+        match post_account {
+            Some(post_account) => {
+                if let Some(post_balance) = collect_token_balance_from_account(
+                    id,
+                    post_account,
+                    storage.clone(),
+                    post_accounts.clone(),
+                    index,
+                    &mut mint_decimals,
+                ) {
+                    post_balances.push(post_balance);
+                }
+            }
+            None => {}
+        };
     }
 
-    if pre_balances.is_empty() && post_balances.is_empty() {
-        return None;
-    }
     Some(TransactionTokenBalancesSet {
         pre_token_balances: pre_balances,
         post_token_balances: post_balances,
@@ -92,6 +99,7 @@ fn collect_token_balance_from_account<T: Storage + Clone + 'static>(
     id: Uuid,
     account: AccountSharedData,
     storage: T,
+    post_accounts: Vec<(Pubkey, AccountSharedData)>,
     account_idx: usize,
     mint_decimals: &mut HashMap<Pubkey, u8>,
 ) -> Option<TransactionTokenBalance> {
@@ -103,7 +111,7 @@ fn collect_token_balance_from_account<T: Storage + Clone + 'static>(
     let mint = token_account.base.mint;
 
     let decimals = mint_decimals.get(&mint).cloned().or_else(|| {
-        let decimals = get_mint_decimals(storage, id, &mint)?;
+        let decimals = get_mint_decimals(storage, post_accounts, id, &mint)?;
         mint_decimals.insert(mint, decimals);
         Some(decimals)
     })?;
@@ -125,13 +133,20 @@ fn collect_token_balance_from_account<T: Storage + Clone + 'static>(
 
 fn get_mint_decimals<T: Storage + Clone + 'static>(
     storage: T,
+    post_accounts: Vec<(Pubkey, AccountSharedData)>,
     id: Uuid,
     mint: &Pubkey,
 ) -> Option<u8> {
     if mint == &spl_token::native_mint::id() {
         Some(spl_token::native_mint::DECIMALS)
     } else {
-        let mint_account = storage.get_account(id, mint).ok()??;
+        let mint_account = match post_accounts.iter().find(|(pubkey, _)| pubkey == mint) {
+            Some((_, account)) => account.clone(),
+            None => match storage.get_account(id, mint).ok()? {
+                Some(account) => account.to_account_shared_data(),
+                None => return None,
+            },
+        };
 
         if !is_known_spl_token_id(mint_account.owner()) {
             return None;
