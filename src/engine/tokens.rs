@@ -11,6 +11,9 @@ use spl_token_2022::{
     extension::StateWithExtensions,
     state::{Account as TokenAccount, Mint},
 };
+use uuid::Uuid;
+
+use crate::storage::Storage;
 
 use super::{
     transactions::{TransactionTokenBalance, TransactionTokenBalancesSet},
@@ -26,9 +29,11 @@ pub struct TokenAmount {
     pub ui_amount_string: String,
 }
 
-pub fn collect_token_balances(
+pub fn collect_token_balances<T: Storage + Clone + 'static>(
+    id: Uuid,
     tx: SanitizedTransaction,
     accounts_db: &AccountsDB,
+    storage: T,
     post_accounts: Vec<(Pubkey, AccountSharedData)>,
 ) -> Option<TransactionTokenBalancesSet> {
     let account_keys = tx.message().account_keys();
@@ -36,6 +41,7 @@ pub fn collect_token_balances(
     if !has_token_program {
         return None;
     }
+    println!("collect_token_balances: {:?}", tx.message().account_keys());
 
     let mut mint_decimals: HashMap<Pubkey, u8> = HashMap::new();
 
@@ -53,24 +59,39 @@ pub fn collect_token_balances(
             .map(|(_, account)| account.clone())
             .unwrap_or_default();
 
-        if let Some(pre_balance) =
-            collect_token_balance_from_account(pre_account, accounts_db, index, &mut mint_decimals)
-        {
+        if let Some(pre_balance) = collect_token_balance_from_account(
+            id,
+            pre_account,
+            storage.clone(),
+            index,
+            &mut mint_decimals,
+        ) {
             pre_balances.push(pre_balance);
         }
-        if let Some(post_balance) =
-            collect_token_balance_from_account(post_account, accounts_db, index, &mut mint_decimals)
-        {
+        if let Some(post_balance) = collect_token_balance_from_account(
+            id,
+            post_account,
+            storage.clone(),
+            index,
+            &mut mint_decimals,
+        ) {
             post_balances.push(post_balance);
         }
     }
 
-    None
+    if pre_balances.is_empty() && post_balances.is_empty() {
+        return None;
+    }
+    Some(TransactionTokenBalancesSet {
+        pre_token_balances: pre_balances,
+        post_token_balances: post_balances,
+    })
 }
 
-fn collect_token_balance_from_account(
+fn collect_token_balance_from_account<T: Storage + Clone + 'static>(
+    id: Uuid,
     account: AccountSharedData,
-    accounts_db: &AccountsDB,
+    storage: T,
     account_idx: usize,
     mint_decimals: &mut HashMap<Pubkey, u8>,
 ) -> Option<TransactionTokenBalance> {
@@ -82,7 +103,7 @@ fn collect_token_balance_from_account(
     let mint = token_account.base.mint;
 
     let decimals = mint_decimals.get(&mint).cloned().or_else(|| {
-        let decimals = get_mint_decimals(accounts_db, &mint)?;
+        let decimals = get_mint_decimals(storage, id, &mint)?;
         mint_decimals.insert(mint, decimals);
         Some(decimals)
     })?;
@@ -102,11 +123,15 @@ fn collect_token_balance_from_account(
     })
 }
 
-fn get_mint_decimals(accounts_db: &AccountsDB, mint: &Pubkey) -> Option<u8> {
+fn get_mint_decimals<T: Storage + Clone + 'static>(
+    storage: T,
+    id: Uuid,
+    mint: &Pubkey,
+) -> Option<u8> {
     if mint == &spl_token::native_mint::id() {
         Some(spl_token::native_mint::DECIMALS)
     } else {
-        let mint_account = accounts_db.get_account(mint)?;
+        let mint_account = storage.get_account(id, mint).ok()??;
 
         if !is_known_spl_token_id(mint_account.owner()) {
             return None;

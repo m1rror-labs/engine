@@ -197,8 +197,13 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             unreachable!("Log collector should not be used after send_transaction returns")
         };
 
-        let account_balances =
-            collect_token_balances(tx.clone(), &accounts_db, post_accounts.clone());
+        let account_balances = collect_token_balances(
+            id,
+            tx.clone(),
+            &accounts_db,
+            self.storage.clone(),
+            post_accounts.clone(),
+        );
         let (pre_token_balances, post_token_balances) = match account_balances {
             Some(balances) => (
                 Some(balances.pre_token_balances),

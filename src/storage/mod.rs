@@ -506,6 +506,7 @@ impl Storage for PgStorage {
             Option<DbTransactionLogMessage>,
             Option<DbTransactionMeta>,
             Option<DbTransactionSignature>,
+            Option<DBTransactionTokenBalance>,
         )> = crate::schema::transactions::table
             .left_join(
                 crate::schema::transaction_account_keys::table
@@ -531,6 +532,11 @@ impl Storage for PgStorage {
                     .on(crate::schema::transactions::signature
                         .eq(crate::schema::transaction_signatures::transaction_signature)),
             )
+            .left_join(
+                crate::schema::transaction_token_balances::table
+                    .on(crate::schema::transactions::signature
+                        .eq(crate::schema::transaction_token_balances::transaction_signature)),
+            )
             .filter(crate::schema::transactions::signature.eq(signature.to_string()))
             .filter(crate::schema::transactions::blockchain.eq(id))
             .load::<(
@@ -540,6 +546,7 @@ impl Storage for PgStorage {
                 Option<DbTransactionLogMessage>,
                 Option<DbTransactionMeta>,
                 Option<DbTransactionSignature>,
+                Option<DBTransactionTokenBalance>,
             )>(&mut conn)
             .map_err(|e| e.to_string())?;
 
@@ -552,12 +559,14 @@ impl Storage for PgStorage {
                 Vec<DbTransactionLogMessage>,
                 Vec<DbTransactionMeta>,
                 Vec<DbTransactionSignature>,
+                Vec<DBTransactionTokenBalance>,
             ),
         > = HashMap::new();
 
-        for (tx, account_key, instruction, log_message, meta, signature) in res {
+        for (tx, account_key, instruction, log_message, meta, signature, token_balances) in res {
             let entry = transaction_map.entry(tx.id.clone()).or_insert((
                 tx,
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
@@ -592,6 +601,11 @@ impl Storage for PgStorage {
                     entry.5.push(signature);
                 }
             };
+            if let Some(token_balance) = token_balances {
+                if entry.6.iter().find(|t| t.id == token_balance.id).is_none() {
+                    entry.6.push(token_balance);
+                }
+            };
         }
 
         if transaction_map.is_empty() {
@@ -602,7 +616,7 @@ impl Storage for PgStorage {
             return Err("Multiple transactions found with the same signature".to_string());
         }
 
-        let (db_tx, account_keys, instructions, logs, metas, signatures) =
+        let (db_tx, account_keys, instructions, logs, metas, signatures, token_balances) =
             transaction_map.into_iter().next().unwrap().1;
 
         let instructions = instructions
@@ -620,7 +634,7 @@ impl Storage for PgStorage {
             message: solana_sdk::message::Message::new(&instructions, None),
         };
 
-        let metadata = tx_meta.to_metadata(logs);
+        let metadata = tx_meta.to_metadata(logs, token_balances);
 
         Ok(Some((
             tx,

@@ -4,6 +4,7 @@ use crate::engine::transactions::TransactionTokenBalance;
 use bigdecimal::BigDecimal;
 use bigdecimal::ToPrimitive;
 use diesel::prelude::*;
+use solana_account_decoder::parse_token::UiTokenAmount;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::{
     account::ReadableAccount,
@@ -237,7 +238,11 @@ impl DbTransactionMeta {
         }
     }
 
-    pub fn to_metadata(&self, logs: Vec<DbTransactionLogMessage>) -> TransactionMeta {
+    pub fn to_metadata(
+        &self,
+        logs: Vec<DbTransactionLogMessage>,
+        token_balances: Vec<DBTransactionTokenBalance>,
+    ) -> TransactionMeta {
         let status = match &self.err {
             Some(_) => serde_json::json!({
                 "Err": self.err,
@@ -258,13 +263,47 @@ impl DbTransactionMeta {
                 .iter()
                 .map(|a| (*a as u64).into())
                 .collect(),
-            pre_token_balances: None,
+            pre_token_balances: Some(
+                token_balances
+                    .iter()
+                    .filter(|b| b.pre_transaction)
+                    .map(|b| TransactionTokenBalance {
+                        account_index: b.account_index as u8,
+                        mint: b.mint.clone(),
+                        ui_token_amount: UiTokenAmount {
+                            amount: b.amount.to_string(),
+                            decimals: b.decimals as u8,
+                            ui_amount: Some(b.amount.to_f64().unwrap()),
+                            ui_amount_string: b.amount.to_string(),
+                        },
+                        owner: b.owner.clone(),
+                        program_id: b.program_id.clone(),
+                    })
+                    .collect(),
+            ),
             post_balances: self
                 .post_balances
                 .iter()
                 .map(|a| (*a as u64).into())
                 .collect(),
-            post_token_balances: None,
+            post_token_balances: Some(
+                token_balances
+                    .iter()
+                    .filter(|b| !b.pre_transaction)
+                    .map(|b| TransactionTokenBalance {
+                        account_index: b.account_index as u8,
+                        mint: b.mint.clone(),
+                        ui_token_amount: UiTokenAmount {
+                            amount: b.amount.to_string(),
+                            decimals: b.decimals as u8,
+                            ui_amount: Some(b.amount.to_f64().unwrap()),
+                            ui_amount_string: b.amount.to_string(),
+                        },
+                        owner: b.owner.clone(),
+                        program_id: b.program_id.clone(),
+                    })
+                    .collect(),
+            ),
             rewards: vec![],
             status: status,
         }
@@ -324,8 +363,8 @@ impl DbTransactionSignature {
 pub struct DBTransactionTokenBalance {
     pub id: Uuid,
     pub created_at: chrono::NaiveDateTime,
-    pub transaction_signature: String,
     pub account_index: i16,
+    pub transaction_signature: String,
     pub mint: String,
     pub owner: String,
     pub program_id: String,

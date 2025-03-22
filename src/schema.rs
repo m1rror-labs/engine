@@ -1,5 +1,20 @@
 use diesel::{allow_tables_to_appear_in_same_query, table};
 
+allow_tables_to_appear_in_same_query!(
+    transactions,
+    transaction_account_keys,
+    transaction_instructions,
+    transaction_log_messages,
+    transaction_meta,
+    transaction_signatures,
+    transaction_token_balances,
+    accounts,
+    blocks,
+    blockchains,
+    teams,
+    api_keys
+);
+
 table! {
     accounts (id) {
         id -> Uuid,
@@ -50,20 +65,6 @@ table! {
         blockchain -> Uuid,
     }
 }
-
-allow_tables_to_appear_in_same_query!(
-    transactions,
-    transaction_account_keys,
-    transaction_instructions,
-    transaction_log_messages,
-    transaction_meta,
-    transaction_signatures,
-    accounts,
-    blocks,
-    blockchains,
-    teams,
-    api_keys
-);
 
 table! {
     transaction_account_keys (id) {
