@@ -139,3 +139,18 @@ table! {
         label -> Text,
     }
 }
+
+table! {
+    transaction_token_balances (id) {
+        id -> Uuid,
+        created_at -> Timestamp,
+        account_index -> SmallInt,
+        transaction_signature -> Text,
+        mint -> Text,
+        owner -> Text,
+        program_id -> Text,
+        amount -> Numeric,
+        decimals -> SmallInt,
+        pre_transaction -> Bool,
+    }
+}

@@ -39,7 +39,7 @@ use std::{
 use tokio::sync::mpsc::{self};
 use uuid::Uuid;
 
-use crate::storage::Storage;
+use crate::{engine::tokens::collect_token_balances, storage::Storage};
 
 use super::{
     blocks::Block, builtins::BUILTINS, construct_instructions_account, execute_tx_helper,
@@ -197,6 +197,16 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             unreachable!("Log collector should not be used after send_transaction returns")
         };
 
+        let account_balances =
+            collect_token_balances(tx.clone(), &accounts_db, post_accounts.clone());
+        let (pre_token_balances, post_token_balances) = match account_balances {
+            Some(balances) => (
+                Some(balances.pre_token_balances),
+                Some(balances.post_token_balances),
+            ),
+            None => (None, None),
+        };
+
         let meta = TransactionMetadata {
             signature,
             err: tx_result.err(),
@@ -206,7 +216,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             return_data,
             tx: tx.clone(),
             current_block,
-            //TODO: This may be wrong
             pre_accounts: account_keys
                 .iter()
                 .map(|k| {
@@ -233,6 +242,8 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                     }
                 })
                 .collect(),
+            pre_token_balances,
+            post_token_balances,
         };
         self.storage.save_transaction(id, &meta)?;
 
@@ -330,6 +341,8 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 })
                 .collect(),
             post_accounts: post_accounts.clone(),
+            pre_token_balances: None,  //TODO: Implement pre_token_balances
+            post_token_balances: None, //TODO: Implement post_token_balances
         };
 
         Ok(meta)

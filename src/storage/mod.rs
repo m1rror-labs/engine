@@ -19,8 +19,8 @@ use solana_sdk::{
 };
 use teams::Team;
 use transactions::{
-    DbTransaction, DbTransactionAccountKey, DbTransactionInstruction, DbTransactionLogMessage,
-    DbTransactionMeta, DbTransactionSignature,
+    DBTransactionTokenBalance, DbTransaction, DbTransactionAccountKey, DbTransactionInstruction,
+    DbTransactionLogMessage, DbTransactionMeta, DbTransactionSignature,
 };
 use uuid::Uuid;
 
@@ -450,6 +450,31 @@ impl Storage for PgStorage {
             diesel::insert_into(crate::schema::transaction_signatures::table)
                 .values(DbTransactionSignature::from_transaction(tx))
                 .execute(conn)?;
+
+            let mut token_balances: Vec<DBTransactionTokenBalance> = Vec::new();
+            if let Some(pre_balances) = &tx.pre_token_balances {
+                for pre_balance in pre_balances {
+                    token_balances.push(DBTransactionTokenBalance::from_token_balance(
+                        pre_balance,
+                        &tx.signature.to_string(),
+                        true,
+                    ));
+                }
+            }
+            if let Some(post_balances) = &tx.post_token_balances {
+                for post_balance in post_balances {
+                    token_balances.push(DBTransactionTokenBalance::from_token_balance(
+                        post_balance,
+                        &tx.signature.to_string(),
+                        false,
+                    ));
+                }
+            }
+            if token_balances.len() > 0 {
+                diesel::insert_into(crate::schema::transaction_token_balances::table)
+                    .values(token_balances)
+                    .execute(conn)?;
+            }
             Ok(())
         })
         .map_err(|e| e.to_string())?;

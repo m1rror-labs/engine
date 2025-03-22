@@ -1,5 +1,6 @@
 use crate::engine::transactions::TransactionMeta;
 use crate::engine::transactions::TransactionMetadata;
+use crate::engine::transactions::TransactionTokenBalance;
 use bigdecimal::BigDecimal;
 use bigdecimal::ToPrimitive;
 use diesel::prelude::*;
@@ -257,13 +258,13 @@ impl DbTransactionMeta {
                 .iter()
                 .map(|a| (*a as u64).into())
                 .collect(),
-            pre_token_balances: vec![],
+            pre_token_balances: None,
             post_balances: self
                 .post_balances
                 .iter()
                 .map(|a| (*a as u64).into())
                 .collect(),
-            post_token_balances: vec![],
+            post_token_balances: None,
             rewards: vec![],
             status: status,
         }
@@ -303,5 +304,49 @@ impl DbTransactionSignature {
                 signature: signature.to_string(),
             })
             .collect()
+    }
+}
+
+#[derive(
+    Queryable,
+    QueryableByName,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Hash,
+)]
+#[diesel(table_name = crate::schema::transaction_token_balances)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct DBTransactionTokenBalance {
+    pub id: Uuid,
+    pub created_at: chrono::NaiveDateTime,
+    pub transaction_signature: String,
+    pub account_index: i16,
+    pub mint: String,
+    pub owner: String,
+    pub program_id: String,
+    pub amount: BigDecimal,
+    pub decimals: i16,
+    pub pre_transaction: bool,
+}
+
+impl DBTransactionTokenBalance {
+    pub fn from_token_balance(meta: &TransactionTokenBalance, tx_sig: &str, pre_tx: bool) -> Self {
+        DBTransactionTokenBalance {
+            id: Uuid::new_v4(),
+            created_at: chrono::Utc::now().naive_utc(),
+            transaction_signature: tx_sig.to_string(),
+            account_index: meta.account_index as i16,
+            mint: meta.mint.clone(),
+            owner: meta.owner.clone(),
+            program_id: meta.program_id.clone(),
+            amount: meta.ui_token_amount.amount.parse::<BigDecimal>().unwrap(),
+            decimals: meta.ui_token_amount.decimals as i16,
+            pre_transaction: pre_tx,
+        }
     }
 }
