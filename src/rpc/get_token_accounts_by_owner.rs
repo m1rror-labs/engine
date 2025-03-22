@@ -1,6 +1,7 @@
 use serde_json::Value;
 use solana_sdk::program_pack::Pack;
 use spl_token::state::Account as SplAccount;
+use spl_token_2022::{extension::StateWithExtensions, state::Mint};
 use uuid::Uuid;
 
 use crate::{
@@ -45,7 +46,7 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
             return Err(serde_json::json!({
                 "code": -32002,
                 "message": "Failed to get latest block",
-            }))
+            }));
         }
     };
 
@@ -54,33 +55,60 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
             let vals = accounts
                 .iter()
                 .map(|(pubkey, account)| {
-                    let mint =
-                        SplAccount::unpack_from_slice(account.data.as_slice()).map_err(|e| {
-                            Err(serde_json::json!({
-                                "code": -32002,
-                                "message": e.to_string(),
-                            }))
-                        });
-
-                    let mint = match mint {
-                        Ok(mint) => mint,
+                    let ata = SplAccount::unpack_from_slice(account.data.as_slice()).map_err(|e| {
+                        Err(serde_json::json!({
+                            "code": -32002,
+                            "message": e.to_string(),
+                        }))
+                    });
+                    let ata = match ata {
+                        Ok(ata) => ata,
                         Err(e) => return e,
                     };
+
+                    let mint_account = match svm.get_account(id, &ata.mint) {
+                        Ok(mint) => match mint {
+                            Some(mint) => mint,
+                            None => {
+                                return Err(serde_json::json!({
+                                    "code": -32002,
+                                    "message": "Mint account not found",
+                                }));
+                            }
+                        },
+                        Err(e) => {
+                            return Err(serde_json::json!({
+                                "code": -32002,
+                                "message": e.to_string(),
+                            }));
+                        }
+                    };
+
+                    let mint = match StateWithExtensions::<Mint>::unpack(&mint_account.data).ok() {
+                        Some(token_account) => token_account,
+                        None => {
+                            return Err(serde_json::json!({
+                                "code": -32002,
+                                "message": "Failed to unpack token account",
+                            }));
+                        }
+                    };
+                    let ui_amount = ata.amount as f64 / 10f64.powi(mint.base.decimals as i32);
 
                     Ok(serde_json::json!({
                         "account": {
                             "data": {
                               "parsed": {
                                 "info": {
-                                  "isNative": mint.is_native(),
-                                  "mint": mint.mint.to_string(),
-                                  "owner": mint.owner.to_string(),
+                                  "isNative": ata.is_native(),
+                                  "mint": ata.mint.to_string(),
+                                  "owner": ata.owner.to_string(),
                                   "state": "initialized",
                                   "tokenAmount": {
-                                    "amount": mint.amount,
-                                    "decimals": "", //TODO: Implement this
-                                    "uiAmount": mint.amount,
-                                    "uiAmountString": mint.amount.to_string(),
+                                    "amount": ata.amount.to_string(),
+                                    "decimals": mint.base.decimals,
+                                    "uiAmount": ui_amount,
+                                    "uiAmountString": ui_amount.to_string(),
                                   }
                                 },
                                 "type": "account"
