@@ -110,6 +110,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
         &self,
         id: Uuid,
         pubkey: &Pubkey,
+        program_id: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
     fn get_program_accounts(
         &self,
@@ -552,17 +553,11 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         &self,
         id: Uuid,
         pubkey: &Pubkey,
+        program_id: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String> {
-        let token_program = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-        let token_2022 = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-        let token_accounts = self
+        let accounts = self
             .storage
-            .get_token_accounts_by_owner(id, pubkey, &token_program);
-        let token_2022_accounts = self
-            .storage
-            .get_token_accounts_by_owner(id, pubkey, &token_2022);
-        let mut accounts = token_accounts?;
-        accounts.extend(token_2022_accounts?);
+            .get_token_accounts_by_owner(id, pubkey, program_id)?;
         Ok(accounts)
     }
     fn get_program_accounts(

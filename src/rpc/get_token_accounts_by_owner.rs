@@ -39,6 +39,30 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
             }));
         }
     };
+    let program_id_str = match req
+        .params
+        .as_ref()
+        .and_then(|params| params.get(1))
+        .and_then(|v| v.get("programId"))
+        .and_then(|v| v.as_str())
+    {
+        Some(s) => s,
+        None => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": "`params` should have a second argument with a `programId` field"
+            }));
+        }
+    };
+    let program_id = match parse_pubkey(program_id_str) {
+        Ok(program_id) => program_id,
+        Err(e) => {
+            return Err(serde_json::json!({
+                "code": -32602,
+                "message": e,
+            }));
+        }
+    };
 
     let slot = match svm.get_latest_block(id) {
         Ok(slot) => slot,
@@ -50,11 +74,17 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.get_token_accounts_by_owner(id, &pubkey) {
+    match svm.get_token_accounts_by_owner(id, &pubkey, &program_id) {
         Ok(accounts) => {
             let vals = accounts
                 .iter()
+                .filter(|(_, account)| {
+                    // Filter out non-SPL token accounts
+                    account.data.len() > 163
+                })
                 .map(|(pubkey, account)| {
+                    println!("1, {:?}", account.data);
+
                     let ata = SplAccount::unpack_from_slice(account.data.as_slice()).map_err(|e| {
                         Err(serde_json::json!({
                             "code": -32002,
@@ -65,6 +95,7 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
                         Ok(ata) => ata,
                         Err(e) => return e,
                     };
+                    println!("2");
 
                     // TODO: This is not optimized, should optimize this
                     let mint_account = match svm.get_account(id, &ata.mint) {
@@ -94,6 +125,7 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
                             }));
                         }
                     };
+                    println!("3");
                     let ui_amount = ata.amount as f64 / 10f64.powi(mint.base.decimals as i32);
 
                     Ok(serde_json::json!({
