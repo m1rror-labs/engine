@@ -6,7 +6,7 @@ use engine::TransactionProcessor;
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
-use solana_program::{last_restart_slot::LastRestartSlot, pubkey};
+use solana_program::last_restart_slot::LastRestartSlot;
 use solana_program_runtime::sysvar_cache::SysvarCache;
 use solana_sdk::{
     account::{Account, AccountSharedData, ReadableAccount, WritableAccount},
