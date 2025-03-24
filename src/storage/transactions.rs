@@ -267,17 +267,20 @@ impl DbTransactionMeta {
                 token_balances
                     .iter()
                     .filter(|b| b.pre_transaction)
-                    .map(|b| TransactionTokenBalance {
-                        account_index: b.account_index as u8,
-                        mint: b.mint.clone(),
-                        ui_token_amount: UiTokenAmount {
-                            amount: b.amount.to_string(),
-                            decimals: b.decimals as u8,
-                            ui_amount: Some(b.amount.to_f64().unwrap()),
-                            ui_amount_string: b.amount.to_string(),
-                        },
-                        owner: b.owner.clone(),
-                        program_id: b.program_id.clone(),
+                    .map(|b| {
+                        let ui_amount = b.amount.to_f64().unwrap() / 10f64.powi(b.decimals as i32);
+                        TransactionTokenBalance {
+                            account_index: b.account_index as u8,
+                            mint: b.mint.clone(),
+                            ui_token_amount: UiTokenAmount {
+                                amount: b.amount.to_string(),
+                                decimals: b.decimals as u8,
+                                ui_amount: Some(ui_amount),
+                                ui_amount_string: ui_amount.to_string(),
+                            },
+                            owner: b.owner.clone(),
+                            program_id: b.program_id.clone(),
+                        }
                     })
                     .collect(),
             ),
@@ -290,17 +293,20 @@ impl DbTransactionMeta {
                 token_balances
                     .iter()
                     .filter(|b| !b.pre_transaction)
-                    .map(|b| TransactionTokenBalance {
-                        account_index: b.account_index as u8,
-                        mint: b.mint.clone(),
-                        ui_token_amount: UiTokenAmount {
-                            amount: b.amount.to_string(),
-                            decimals: b.decimals as u8,
-                            ui_amount: Some(b.amount.to_f64().unwrap()),
-                            ui_amount_string: b.amount.to_string(),
-                        },
-                        owner: b.owner.clone(),
-                        program_id: b.program_id.clone(),
+                    .map(|b| {
+                        let ui_amount = b.amount.to_f64().unwrap() / 10f64.powi(b.decimals as i32);
+                        TransactionTokenBalance {
+                            account_index: b.account_index as u8,
+                            mint: b.mint.clone(),
+                            ui_token_amount: UiTokenAmount {
+                                amount: b.amount.to_string(),
+                                decimals: b.decimals as u8,
+                                ui_amount: Some(ui_amount),
+                                ui_amount_string: ui_amount.to_string(),
+                            },
+                            owner: b.owner.clone(),
+                            program_id: b.program_id.clone(),
+                        }
                     })
                     .collect(),
             ),

@@ -83,8 +83,6 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
                     account.data.len() > 163
                 })
                 .map(|(pubkey, account)| {
-                    println!("1, {:?}", account.data);
-
                     let ata = SplAccount::unpack_from_slice(account.data.as_slice()).map_err(|e| {
                         Err(serde_json::json!({
                             "code": -32002,
@@ -95,8 +93,6 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
                         Ok(ata) => ata,
                         Err(e) => return e,
                     };
-                    println!("2");
-
                     // TODO: This is not optimized, should optimize this
                     let mint_account = match svm.get_account(id, &ata.mint) {
                         Ok(mint) => match mint {
@@ -125,7 +121,6 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
                             }));
                         }
                     };
-                    println!("3");
                     let ui_amount = ata.amount as f64 / 10f64.powi(mint.base.decimals as i32);
 
                     Ok(serde_json::json!({
