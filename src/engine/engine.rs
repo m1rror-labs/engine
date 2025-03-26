@@ -393,7 +393,17 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             if BUILTINS.iter().any(|b| b.program_id == program_id) {
                 return;
             }
-            let program_account = accounts_db.get_account(&program_id).unwrap();
+            let program_account = match accounts_db.get_account(&program_id){
+                Some(account) => account,
+                None => match mut_self.storage.get_account(id, &program_id) {
+                    Ok(account) => match account {
+                        Some(account) => account.into(),
+                        None => return,
+                    },
+                    Err(_) => return,
+                },
+            };
+            
             let program_runtime_v1 = create_program_runtime_environment_v1(
                 &self.feature_set,
                 &ComputeBudget::default(),
