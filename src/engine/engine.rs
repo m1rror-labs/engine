@@ -388,42 +388,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             create_program_runtime_environment_v2(&ComputeBudget::default(), true);
         program_cache_for_tx_batch.environments.program_runtime_v1 = Arc::new(program_runtime_v1);
         program_cache_for_tx_batch.environments.program_runtime_v2 = Arc::new(program_runtime_v2);
-        tx.message().instructions().iter().for_each(|i| {
-            let program_id = tx.message().account_keys()[i.program_id_index as usize];
-            if BUILTINS.iter().any(|b| b.program_id == program_id) {
-                return;
-            }
-            let program_account = match accounts_db.get_account(&program_id){
-                Some(account) => account,
-                None => match mut_self.storage.get_account(id, &program_id) {
-                    Ok(account) => match account {
-                        Some(account) => account.into(),
-                        None => return,
-                    },
-                    Err(_) => return,
-                },
-            };
-            
-            let program_runtime_v1 = create_program_runtime_environment_v1(
-                &self.feature_set,
-                &ComputeBudget::default(),
-                false,
-                true,
-            )
-            .unwrap();
-            let entry = ProgramCacheEntry::new(
-                program_account.owner(),
-                Arc::new(program_runtime_v1),
-                100,
-                100,
-                program_account.data(),
-                program_account.data().len(),
-                &mut LoadProgramMetrics::default(),
-            )
-            .unwrap(); //TODO: This may panic
-
-            program_cache_for_tx_batch.replenish(program_id, Arc::new(entry));
-        });
 
         let mut accumulated_consume_units = 0;
         let message = tx.message();
@@ -477,6 +441,45 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 return (Err(e), accumulated_consume_units, None, fee, payer_key);
             }
         };
+        accounts.iter().for_each(|(pubkey, account)| {
+            if !account.executable() {
+                return;
+            }
+            let pubkey = pubkey.to_owned();
+            if BUILTINS.iter().any(|b| b.program_id == pubkey) {
+                return;
+            }
+            let program_account = match accounts_db.get_account(&pubkey) {
+                Some(account) => account,
+                None => match mut_self.storage.get_account(id, &pubkey) {
+                    Ok(account) => match account {
+                        Some(account) => account.into(),
+                        None => return,
+                    },
+                    Err(_) => return,
+                },
+            };
+
+            let program_runtime_v1 = create_program_runtime_environment_v1(
+                &self.feature_set,
+                &ComputeBudget::default(),
+                false,
+                true,
+            )
+            .unwrap();
+            let entry = ProgramCacheEntry::new(
+                program_account.owner(),
+                Arc::new(program_runtime_v1),
+                0,
+                0,
+                program_account.data(),
+                program_account.data().len(),
+                &mut LoadProgramMetrics::default(),
+            )
+            .unwrap(); //TODO: This may panic
+
+            program_cache_for_tx_batch.replenish(pubkey, Arc::new(entry));
+        });
         if !validated_fee_payer {
             return (
                 Err(TransactionError::AccountNotFound),
