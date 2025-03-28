@@ -34,5 +34,10 @@ pub fn load_spl_programs<T: Storage + Clone + 'static>(
         pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"),
         include_bytes!("programs/spl_associated_token_account-1.1.1.so"),
     )?;
+    svm.add_program(
+        id,
+        pubkey!("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
+        include_bytes!("programs/metaplex_metadata_program.so"),
+    )?;
     Ok(())
 }
