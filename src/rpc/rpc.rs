@@ -4,7 +4,7 @@ use base64::prelude::*;
 use bincode::Options;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use solana_account_decoder::encode_ui_account;
+use solana_account_decoder::{encode_ui_account, parse_account_data::AccountAdditionalDataV2};
 use solana_account_decoder_client_types::{UiAccount, UiAccountEncoding, UiDataSliceConfig};
 use solana_sdk::{
     account::ReadableAccount, bs58, hash::Hash, packet::PACKET_DATA_SIZE, pubkey::Pubkey,
@@ -363,6 +363,7 @@ pub fn encode_account<T: ReadableAccount>(
     account: &T,
     pubkey: &Pubkey,
     encoding: UiAccountEncoding,
+    additional_data: Option<AccountAdditionalDataV2>,
     data_slice: Option<UiDataSliceConfig>,
 ) -> Result<UiAccount, String> {
     if (encoding == UiAccountEncoding::Binary || encoding == UiAccountEncoding::Base58)
@@ -375,7 +376,11 @@ pub fn encode_account<T: ReadableAccount>(
         Err(message)
     } else {
         Ok(encode_ui_account(
-            pubkey, account, encoding, None, data_slice,
+            pubkey,
+            account,
+            encoding,
+            additional_data,
+            data_slice,
         ))
     }
 }

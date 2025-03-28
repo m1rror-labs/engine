@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use engine::TransactionProcessor;
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
+use solana_account_decoder::parse_token::is_known_spl_token_id;
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
 use solana_program::last_restart_slot::LastRestartSlot;
 use solana_program_runtime::sysvar_cache::SysvarCache;
@@ -80,6 +81,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String>;
+    fn get_mint_data(&self, id: Uuid, pubkey: &Pubkey) -> Result<Mint, String>;
     fn get_transactions_for_address(
         &self,
         id: Uuid,
@@ -401,6 +403,19 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
 
     fn get_account(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<Account>, String> {
         self.storage.get_account(id, pubkey)
+    }
+
+    fn get_mint_data(&self, id: Uuid, pubkey: &Pubkey) -> Result<Mint, String> {
+        let account = match self.get_account(id, pubkey)? {
+            Some(account) => account,
+            None => return Err("Account not found".to_string()),
+        };
+
+        if !is_known_spl_token_id(&account.owner) {
+            return Err("Not a valid SPL token account".to_string());
+        }
+
+        Mint::unpack_from_slice(account.data.as_slice()).map_err(|e| e.to_string())
     }
 
     fn get_transactions_for_address(

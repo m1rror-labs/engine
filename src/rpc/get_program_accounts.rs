@@ -45,7 +45,7 @@ pub fn get_program_accounts<T: Storage + Clone + 'static>(
             "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
 
             "accounts": accounts.iter().map(|(pubkey, account)| {
-            match encode_account(account, &pubkey, UiAccountEncoding::Base64, None) {
+            match encode_account(account, &pubkey, UiAccountEncoding::Base64,None, None) {
                     Ok(encoded_account) => serde_json::json!(encoded_account),
                     Err(e) => {
                         return serde_json::json!({

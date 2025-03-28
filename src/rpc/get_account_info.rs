@@ -1,6 +1,11 @@
 use serde_json::Value;
+use solana_account_decoder::{
+    parse_account_data::{AccountAdditionalDataV2, SplTokenAdditionalData},
+    parse_token::is_known_spl_token_id,
+};
 use solana_account_decoder_client_types::UiAccountEncoding;
 use solana_rpc_client_api::config::RpcAccountInfoConfig;
+use spl_token_2022::{extension::StateWithExtensions, state::Account as TokenAccount};
 use uuid::Uuid;
 
 use crate::{
@@ -62,7 +67,31 @@ pub fn get_account_info<T: Storage + Clone + 'static>(
     match svm.get_account(id, &pubkey) {
         Ok(account) => match account {
             Some(account) => {
-                let account_data = match encode_account(&account, &pubkey, encoding, data_slice) {
+                let additional_data = match is_known_spl_token_id(&account.owner) {
+                    true => match StateWithExtensions::<TokenAccount>::unpack(&account.data) {
+                        Ok(token_account) => {
+                            match svm.get_mint_data(id, &token_account.base.mint) {
+                                Ok(mint_data) => Some(AccountAdditionalDataV2 {
+                                    spl_token_additional_data: Some(SplTokenAdditionalData {
+                                        decimals: mint_data.decimals,
+                                        interest_bearing_config: None,
+                                    }),
+                                }),
+                                Err(_) => None,
+                            }
+                        }
+                        Err(_) => None,
+                    },
+                    false => None,
+                };
+
+                let account_data = match encode_account(
+                    &account,
+                    &pubkey,
+                    encoding,
+                    additional_data,
+                    data_slice,
+                ) {
                     Ok(data) => data,
                     Err(e) => {
                         return Err(serde_json::json!({
