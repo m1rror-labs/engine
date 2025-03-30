@@ -76,6 +76,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
         airdrop_keypair: Option<Keypair>,
         label: Option<String>,
         expiry: Option<chrono::NaiveDateTime>,
+        config: Option<Uuid>,
     ) -> Result<Uuid, String>;
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
@@ -308,6 +309,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         airdrop_keypair: Option<Keypair>,
         label: Option<String>,
         expiry: Option<chrono::NaiveDateTime>,
+        config: Option<Uuid>,
     ) -> Result<Uuid, String> {
         let keypair = match airdrop_keypair {
             Some(k) => k,
@@ -325,6 +327,19 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
 
         let id = self.storage.set_blockchain(&blockchain)?;
         let self_clone = self.clone();
+        if config.is_some() {
+            let config_id = config.unwrap();
+            let accounts = self_clone
+                .storage
+                .get_config_accounts(config_id)
+                .expect("Failed to get config accounts");
+            accounts.iter().for_each(|(pubkey, account)| {
+                self_clone
+                    .storage
+                    .set_account(id, pubkey, account.clone(), None)
+                    .unwrap();
+            });
+        }
         rt::spawn(async move {
             let mut hasher = Sha256::new();
             hasher.update(id.as_bytes());

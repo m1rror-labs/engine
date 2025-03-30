@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use accounts::DbAccount;
+use accounts::{DbAccount, DbConfigAccount};
 use bigdecimal::{BigDecimal, ToPrimitive};
 use blocks::{DbBlock, DbBlockchain};
 use chrono::Utc;
@@ -65,6 +65,13 @@ pub trait Storage {
         id: Uuid,
         program_id: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
+    fn get_config_accounts(&self, config_id: Uuid) -> Result<Vec<(Pubkey, Account)>, String>;
+    fn set_config_account(
+        &self,
+        config_id: Uuid,
+        address: &Pubkey,
+        account: Account,
+    ) -> Result<(), String>;
 
     fn set_block(&self, id: Uuid, block: &Block) -> Result<(), String>;
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String>;
@@ -376,6 +383,36 @@ impl Storage for PgStorage {
                 )
             })
             .collect())
+    }
+    fn get_config_accounts(&self, config_id: Uuid) -> Result<Vec<(Pubkey, Account)>, String> {
+        let mut conn = self.get_connection()?;
+        let accounts = crate::schema::blockchain_config_accounts::table
+            .filter(crate::schema::blockchain_config_accounts::config.eq(config_id))
+            .load::<DbConfigAccount>(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(accounts
+            .iter()
+            .map(|a| {
+                (
+                    Pubkey::from_str(&a.address).unwrap(),
+                    a.clone().into_account(),
+                )
+            })
+            .collect())
+    }
+    fn set_config_account(
+        &self,
+        config_id: Uuid,
+        address: &Pubkey,
+        account: Account,
+    ) -> Result<(), String> {
+        let mut conn = self.get_connection()?;
+        let db_account = DbConfigAccount::from_account(address, &account, None, config_id);
+        diesel::insert_into(crate::schema::blockchain_config_accounts::table)
+            .values(&db_account)
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     fn set_block(&self, id: Uuid, block: &Block) -> Result<(), String> {

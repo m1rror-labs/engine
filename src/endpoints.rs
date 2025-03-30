@@ -4,7 +4,7 @@ use actix_ws::AggregatedMessage;
 use futures::StreamExt as _;
 use serde::Deserialize;
 use solana_sdk::{account::Account, pubkey::Pubkey};
-use std::{env, sync::Arc};
+use std::{env, str::FromStr, sync::Arc};
 
 use serde_json::json;
 use uuid::Uuid;
@@ -191,10 +191,16 @@ pub async fn load_account(
     }
 }
 
+#[derive(Deserialize, Debug, Clone)]
+pub struct CreateBlockchainReq {
+    pub config: Option<Uuid>,
+}
+
 #[post("/blockchains")]
 pub async fn create_blockchain(
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     http_req: HttpRequest,
+    req: web::Json<CreateBlockchainReq>,
 ) -> impl Responder {
     let team = match get_team(svm.clone(), http_req.clone()) {
         Ok(team_id) => team_id,
@@ -218,16 +224,20 @@ pub async fn create_blockchain(
 
     let mut label = None;
     if team.default_expiry.is_some() {
-        let user_id = match http_req.headers().get("user_id"){
+        let user_id = match http_req.headers().get("user_id") {
             Some(user_id) => match user_id.to_str() {
                 Ok(user_id) => user_id.to_string(),
-                Err(_) => return HttpResponse::BadRequest().json(json!({
-                    "message": "Invalid user_id header"
-                })),
+                Err(_) => {
+                    return HttpResponse::BadRequest().json(json!({
+                        "message": "Invalid user_id header"
+                    }))
+                }
             },
-            None => return HttpResponse::BadRequest().json(json!({
-                "message": "Missing user_id header"
-            })),
+            None => {
+                return HttpResponse::BadRequest().json(json!({
+                    "message": "Missing user_id header"
+                }))
+            }
         };
         if user_id == "" {
             return HttpResponse::BadRequest().json(json!({
@@ -236,14 +246,13 @@ pub async fn create_blockchain(
         }
         label = Some(user_id);
     }
-
     let expiry = match team.default_expiry {
         Some(expiry) => {
             Some(chrono::Utc::now().naive_utc() + chrono::Duration::seconds(expiry as i64))
         }
         None => None,
     };
-    let id = svm.create_blockchain(team.id, None,label, expiry);
+    let id = svm.create_blockchain(team.id, None, label, expiry, req.config);
     match id {
         Ok(id) => {
             let mut base_url = "https://rpc.mirror.ad/rpc/";
@@ -254,6 +263,49 @@ pub async fn create_blockchain(
                 "url": format!("{}{}",base_url, id.to_string())
             }))
         }
+        Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct ConvertAccountToConfigReq {
+    pub account: String,
+    pub blockchain: Uuid,
+    pub config: Uuid,
+}
+
+#[post("/accounts/convert")]
+pub async fn convert_account_to_config(
+    svm: web::Data<Arc<SvmEngine<PgStorage>>>,
+    req: web::Json<ConvertAccountToConfigReq>,
+) -> impl Responder {
+    let pubkey = match Pubkey::from_str(&req.account) {
+        Ok(pubkey) => pubkey,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(json!({
+                "message": "Invalid account address"
+            }));
+        }
+    };
+
+    let account = match svm.storage.get_account(req.blockchain, &pubkey) {
+        Ok(account) => match account {
+            Some(account) => account,
+            None => {
+                return HttpResponse::BadRequest().json(json!({
+                    "message": "Account not found"
+                }));
+            }
+        },
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(e.to_string());
+        }
+    };
+
+    match svm.storage.set_config_account(req.config, &pubkey, account) {
+        Ok(_) => HttpResponse::Ok().json(json!({
+            "message": "Account converted to config account successfully"
+        })),
         Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
     }
 }

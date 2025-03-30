@@ -74,3 +74,12 @@ impl DbBlock {
         )
     }
 }
+
+#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+#[diesel(table_name = crate::schema::blockchain_configs)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct DBBlockchainConfig {
+    pub id: Uuid,
+    pub created_at: chrono::NaiveDateTime,
+    pub label: String,
+}

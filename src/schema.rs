@@ -12,7 +12,9 @@ allow_tables_to_appear_in_same_query!(
     blocks,
     blockchains,
     teams,
-    api_keys
+    api_keys,
+    blockchain_configs,
+    blockchain_config_accounts
 );
 
 table! {
@@ -153,5 +155,28 @@ table! {
         amount -> Numeric,
         decimals -> SmallInt,
         pre_transaction -> Bool,
+    }
+}
+
+table! {
+    blockchain_configs (id) {
+        id -> Uuid,
+        created_at -> Timestamp,
+        label -> Text,
+    }
+}
+
+table! {
+    blockchain_config_accounts (id) {
+        id -> Uuid,
+        created_at -> Timestamp,
+        address -> Varchar,
+        lamports -> Numeric,
+        data -> Bytea,
+        owner -> Varchar,
+        executable -> Bool,
+        rent_epoch -> Numeric,
+        label -> Nullable<Varchar>,
+        config -> Uuid,
     }
 }
