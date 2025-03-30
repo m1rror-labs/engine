@@ -410,6 +410,26 @@ impl Storage for PgStorage {
         let db_account = DbConfigAccount::from_account(address, &account, None, config_id);
         diesel::insert_into(crate::schema::blockchain_config_accounts::table)
             .values(&db_account)
+            .on_conflict((
+                crate::schema::blockchain_config_accounts::address,
+                crate::schema::blockchain_config_accounts::config,
+            ))
+            .do_update()
+            .set((
+                crate::schema::blockchain_config_accounts::lamports.eq(excluded(
+                    crate::schema::blockchain_config_accounts::lamports,
+                )),
+                crate::schema::blockchain_config_accounts::data
+                    .eq(excluded(crate::schema::blockchain_config_accounts::data)),
+                crate::schema::blockchain_config_accounts::owner
+                    .eq(excluded(crate::schema::blockchain_config_accounts::owner)),
+                crate::schema::blockchain_config_accounts::executable.eq(excluded(
+                    crate::schema::blockchain_config_accounts::executable,
+                )),
+                crate::schema::blockchain_config_accounts::rent_epoch.eq(excluded(
+                    crate::schema::blockchain_config_accounts::rent_epoch,
+                )),
+            ))
             .execute(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(())
