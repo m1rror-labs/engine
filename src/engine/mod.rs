@@ -572,7 +572,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         let mint = mint.unwrap();
         let mint = Mint::unpack_from_slice(mint.data.as_slice()).map_err(|e| e.to_string())?;
         Ok(Some(TokenAmount {
-            amount: spl.amount,
+            amount: spl.amount.to_string(),
             decimals: mint.decimals,
             ui_amount: spl.amount as f64 / 10f64.powf(mint.decimals as f64),
             ui_amount_string: (spl.amount as f64 / 10f64.powf(mint.decimals as f64)).to_string(),
@@ -609,7 +609,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             |_| Ok(None),
             |mint| {
                 Ok(Some(TokenAmount {
-                    amount: mint.supply,
+                    amount: mint.supply.to_string(),
                     decimals: mint.decimals,
                     ui_amount: mint.supply as f64 / 10f64.powf(mint.decimals as f64),
                     ui_amount_string: (mint.supply as f64 / 10f64.powf(mint.decimals as f64))

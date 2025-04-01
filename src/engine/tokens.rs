@@ -23,7 +23,7 @@ use super::{
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenAmount {
-    pub amount: u64,
+    pub amount: String,
     pub decimals: u8,
     pub ui_amount: f64,
     pub ui_amount_string: String,
