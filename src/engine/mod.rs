@@ -77,6 +77,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
         label: Option<String>,
         expiry: Option<chrono::NaiveDateTime>,
         config: Option<Uuid>,
+        defer_account_initialization: bool,
     ) -> Result<Uuid, String>;
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
@@ -310,6 +311,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         label: Option<String>,
         expiry: Option<chrono::NaiveDateTime>,
         config: Option<Uuid>,
+        defer_account_initialization: bool,
     ) -> Result<Uuid, String> {
         let keypair = match airdrop_keypair {
             Some(k) => k,
@@ -340,7 +342,72 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     .unwrap();
             });
         }
-        rt::spawn(async move {
+        if defer_account_initialization {
+            rt::spawn(async move {
+                let mut hasher = Sha256::new();
+                hasher.update(id.as_bytes());
+                let hash_array = hasher.finalize();
+                let hash = Hash::new_from_array(hash_array.into());
+                match self_clone.storage.set_block(
+                    id,
+                    &Block {
+                        blockhash: hash,
+                        block_time: 0,
+                        previous_blockhash: Hash::default(),
+                        block_height: 0,
+                        parent_slot: 0,
+                        transactions: vec![],
+                    },
+                ) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("Error setting genesis block: {:?}", e);
+                        return;
+                    }
+                };
+                match self_clone.save_sysvars(id) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("Error saving sysvars: {:?}", e);
+                        return;
+                    }
+                };
+                match self_clone.storage.set_account(
+                    id,
+                    &keypair.pubkey(),
+                    Account {
+                        lamports: 1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL),
+                        data: vec![],
+                        owner: system_program::id(),
+                        executable: false,
+                        rent_epoch: 100000000000,
+                    },
+                    None,
+                ) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("Error setting airdrop account: {:?}", e);
+                        return;
+                    }
+                };
+                BUILTINS.iter().for_each(|builtint| {
+                    let mut account: Account =
+                        native_loader::create_loadable_account_for_test(builtint.name).into();
+                    account.rent_epoch = 1000000;
+                    self_clone
+                        .storage
+                        .set_account(id, &builtint.program_id, account, None)
+                        .expect("Failed to set builtin account");
+                });
+                match load_spl_programs(&self_clone, id) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("Error loading SPL programs: {:?}", e);
+                        return;
+                    }
+                };
+            });
+        } else {
             let mut hasher = Sha256::new();
             hasher.update(id.as_bytes());
             let hash_array = hasher.finalize();
@@ -359,14 +426,14 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 Ok(_) => {}
                 Err(e) => {
                     println!("Error setting genesis block: {:?}", e);
-                    return;
+                    return Err(e);
                 }
             };
             match self_clone.save_sysvars(id) {
                 Ok(_) => {}
                 Err(e) => {
                     println!("Error saving sysvars: {:?}", e);
-                    return;
+                    return Err(e);
                 }
             };
             match self_clone.storage.set_account(
@@ -384,7 +451,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 Ok(_) => {}
                 Err(e) => {
                     println!("Error setting airdrop account: {:?}", e);
-                    return;
+                    return Err(e);
                 }
             };
             BUILTINS.iter().for_each(|builtint| {
@@ -400,10 +467,10 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 Ok(_) => {}
                 Err(e) => {
                     println!("Error loading SPL programs: {:?}", e);
-                    return;
+                    return Err(e);
                 }
             };
-        });
+        }
 
         Ok(id)
     }

@@ -199,6 +199,7 @@ pub async fn load_account(
 #[derive(Deserialize, Debug, Clone)]
 pub struct CreateBlockchainReq {
     pub config: Option<Uuid>,
+    pub defer_account_initailization: Option<bool>,
 }
 
 #[post("/blockchains")]
@@ -257,11 +258,25 @@ pub async fn create_blockchain(
         }
         None => None,
     };
-    let config = match req {
+    let config = match &req {
         Some(req) => req.config,
         None => None,
     };
-    let id = svm.create_blockchain(team.id, None, label, expiry, config);
+    let defer_account_initailization = match &req {
+        Some(req) => match req.defer_account_initailization {
+            Some(defer_account_initailization) => defer_account_initailization,
+            None => false,
+        },
+        None => false,
+    };
+    let id = svm.create_blockchain(
+        team.id,
+        None,
+        label,
+        expiry,
+        config,
+        defer_account_initailization,
+    );
     match id {
         Ok(id) => {
             let mut base_url = "https://rpc.mirror.ad/rpc/";
