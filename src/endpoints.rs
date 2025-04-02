@@ -1,9 +1,14 @@
 use actix_multipart::Multipart;
 use actix_web::{delete, get, post, put, rt, web, Error, HttpRequest, HttpResponse, Responder};
 use actix_ws::AggregatedMessage;
+use base64::read;
 use futures::StreamExt as _;
 use serde::Deserialize;
-use solana_sdk::{account::Account, pubkey::Pubkey};
+use solana_program::pubkey;
+use solana_sdk::{
+    account::Account, bpf_loader, program_option::COption, program_pack::Pack, pubkey::Pubkey,
+};
+use spl_token::state::Mint;
 use std::{env, str::FromStr, sync::Arc};
 
 use serde_json::json;
@@ -200,7 +205,7 @@ pub struct CreateBlockchainReq {
 pub async fn create_blockchain(
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     http_req: HttpRequest,
-    req: web::Json<CreateBlockchainReq>,
+    req: Option<web::Json<CreateBlockchainReq>>,
 ) -> impl Responder {
     let team = match get_team(svm.clone(), http_req.clone()) {
         Ok(team_id) => team_id,
@@ -252,7 +257,11 @@ pub async fn create_blockchain(
         }
         None => None,
     };
-    let id = svm.create_blockchain(team.id, None, label, expiry, req.config);
+    let config = match req {
+        Some(req) => req.config,
+        None => None,
+    };
+    let id = svm.create_blockchain(team.id, None, label, expiry, config);
     match id {
         Ok(id) => {
             let mut base_url = "https://rpc.mirror.ad/rpc/";
@@ -301,6 +310,13 @@ pub async fn convert_account_to_config(
             return HttpResponse::InternalServerError().json(e.to_string());
         }
     };
+
+    // let mut mint = Mint::unpack(&account.data).unwrap();
+    // println!("{:?}", mint.mint_authority);
+    // let authority = pubkey!("5YNmS1R9nNSCDzb5a7mMJ1dwK9uHeAAF4CmPEwKgVWr8");
+    // mint.mint_authority = COption::Some(authority);
+
+    // mint.pack_into_slice(&mut account.data);
 
     match svm.storage.set_config_account(req.config, &pubkey, account) {
         Ok(_) => HttpResponse::Ok().json(json!({
