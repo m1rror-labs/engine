@@ -66,6 +66,11 @@ pub trait Storage {
         program_id: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
     fn get_config_accounts(&self, config_id: Uuid) -> Result<Vec<(Pubkey, Account)>, String>;
+    fn get_config_account(
+        &self,
+        config_id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Option<Account>, String>;
     fn set_config_account(
         &self,
         config_id: Uuid,
@@ -399,6 +404,20 @@ impl Storage for PgStorage {
                 )
             })
             .collect())
+    }
+    fn get_config_account(
+        &self,
+        config_id: Uuid,
+        pubkey: &Pubkey,
+    ) -> Result<Option<Account>, String> {
+        let mut conn = self.get_connection()?;
+        let account = crate::schema::blockchain_config_accounts::table
+            .filter(crate::schema::blockchain_config_accounts::config.eq(config_id))
+            .filter(crate::schema::blockchain_config_accounts::address.eq(pubkey.to_string()))
+            .first::<DbConfigAccount>(&mut conn)
+            .optional()
+            .map_err(|e| e.to_string())?;
+        Ok(account.map(|a| a.into_account()))
     }
     fn set_config_account(
         &self,

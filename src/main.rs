@@ -5,8 +5,8 @@ use dotenv::dotenv;
 
 use mockchain_engine::{
     endpoints::{
-        create_blockchain, delete_blockchain, delete_blockchains, expire_blockchains,
-        get_blockchains, load_program, rpc_reqest, rpc_ws,
+        convert_account_to_config, create_blockchain, delete_blockchain, delete_blockchains,
+        expire_blockchains, get_blockchains, load_account, load_program, rpc_reqest, rpc_ws,
     },
     engine::{SvmEngine, SVM},
     storage::{self},
@@ -69,6 +69,7 @@ async fn main() -> std::io::Result<()> {
             .service(load_program)
             .service(delete_blockchains)
             .service(load_program)
+            .service(load_account)
     })
     .bind(("0.0.0.0", 8899))?
     .bind(("::", 9001))?

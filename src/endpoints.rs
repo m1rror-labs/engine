@@ -1,14 +1,10 @@
 use actix_multipart::Multipart;
 use actix_web::{delete, get, post, put, rt, web, Error, HttpRequest, HttpResponse, Responder};
 use actix_ws::AggregatedMessage;
-use base64::read;
+use base64::prelude::*;
 use futures::StreamExt as _;
 use serde::Deserialize;
-use solana_program::pubkey;
-use solana_sdk::{
-    account::Account, bpf_loader, program_option::COption, program_pack::Pack, pubkey::Pubkey,
-};
-use spl_token::state::Mint;
+use solana_sdk::{account::Account, pubkey::Pubkey};
 use std::{env, str::FromStr, sync::Arc};
 
 use serde_json::json;
@@ -125,7 +121,7 @@ pub async fn load_program(
             Ok(i) => i,
             Err(e) => {
                 return HttpResponse::BadRequest().json(json!({
-                    "error": e.to_string()
+                    "message": e.to_string()
                 }));
             }
         };
@@ -162,10 +158,10 @@ pub async fn load_program(
 
 #[derive(Deserialize)]
 pub struct AccountReq {
-    address: Pubkey,
+    address: String,
     lamports: u64,
-    data: Vec<u8>,
-    owner: Pubkey,
+    data: String,
+    owner: String,
     rent_epoch: u64,
     label: Option<String>,
 }
@@ -178,16 +174,43 @@ pub async fn load_account(
 ) -> impl Responder {
     let id = path.into_inner();
 
+    let data = match BASE64_STANDARD.decode(&account.data) {
+        Ok(data) => data,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(json!({
+                "message": "Invalid base64 data"
+            }));
+        }
+    };
+
+    let owner = match Pubkey::from_str(&account.owner) {
+        Ok(owner) => owner,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(json!({
+                "message": "Invalid owner address"
+            }));
+        }
+    };
+
+    let address = match Pubkey::from_str(&account.address) {
+        Ok(address) => address,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(json!({
+                "message": "Invalid account address"
+            }));
+        }
+    };
+
     let acc = Account {
         lamports: account.lamports,
-        data: account.data.clone(),
-        owner: account.owner,
+        data: data,
+        owner: owner,
         executable: false, //Must go through upload program to upload executable accounts
         rent_epoch: account.rent_epoch,
     };
     match svm
         .storage
-        .set_account(id, &account.address, acc, account.label.clone())
+        .set_account(id, &address, acc, account.label.clone())
     {
         Ok(_) => HttpResponse::Ok().json(json!({
             "message": "Account loaded successfully"
