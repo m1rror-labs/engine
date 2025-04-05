@@ -4,7 +4,8 @@ use actix_ws::AggregatedMessage;
 use base64::prelude::*;
 use futures::StreamExt as _;
 use serde::Deserialize;
-use solana_sdk::{account::Account, pubkey::Pubkey};
+use solana_sdk::{account::Account, program_option::COption, program_pack::Pack, pubkey::Pubkey};
+use spl_token::state::Mint;
 use std::{env, str::FromStr, sync::Arc};
 
 use serde_json::json;
@@ -164,6 +165,7 @@ pub struct AccountReq {
     owner: String,
     rent_epoch: u64,
     executable: bool,
+    token_mint_auth: Option<String>,
 }
 
 #[put("/accounts/{id}")]
@@ -175,12 +177,36 @@ pub async fn load_account(
     let id = path.into_inner();
 
     let accounts = accounts_req.iter().map(|account| {
-        let data = match BASE64_STANDARD.decode(&account.data) {
+        let mut data = match BASE64_STANDARD.decode(&account.data) {
             Ok(data) => data,
             Err(_) => {
                 return Err("Invalid base64 data".to_string());
             }
         };
+
+        if account.token_mint_auth.is_some() {
+            let token_mint_signer =
+                match Pubkey::from_str(&account.token_mint_auth.as_ref().unwrap()) {
+                    Ok(token_mint_signer) => token_mint_signer,
+                    Err(_) => {
+                        return Err("Invalid token mint signer".to_string());
+                    }
+                };
+            let mut mint_data = match Mint::unpack(&data) {
+                Ok(mint_data) => mint_data,
+                Err(_) => {
+                    return Err("Invalid mint data".to_string());
+                }
+            };
+            mint_data.mint_authority = COption::Some(token_mint_signer);
+            match Mint::pack(mint_data, &mut data) {
+                Ok(data) => data,
+                Err(_) => {
+                    return Err("Invalid mint data".to_string());
+                }
+            };
+        }
+
         let owner = match Pubkey::from_str(&account.owner) {
             Ok(owner) => owner,
             Err(_) => {

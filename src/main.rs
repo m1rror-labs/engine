@@ -5,8 +5,8 @@ use dotenv::dotenv;
 
 use mockchain_engine::{
     endpoints::{
-        convert_account_to_config, create_blockchain, delete_blockchain, delete_blockchains,
-        expire_blockchains, get_blockchains, load_account, load_program, rpc_reqest, rpc_ws,
+        create_blockchain, delete_blockchain, delete_blockchains, expire_blockchains,
+        get_blockchains, load_account, load_program, rpc_reqest, rpc_ws,
     },
     engine::{SvmEngine, SVM},
     storage::{self},
