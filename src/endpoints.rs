@@ -163,55 +163,58 @@ pub struct AccountReq {
     data: String,
     owner: String,
     rent_epoch: u64,
-    label: Option<String>,
+    executable: bool,
 }
 
 #[put("/accounts/{id}")]
 pub async fn load_account(
-    account: web::Json<AccountReq>,
+    accounts_req: web::Json<Vec<AccountReq>>,
     svm: web::Data<Arc<SvmEngine<PgStorage>>>,
     path: web::Path<Uuid>,
 ) -> impl Responder {
     let id = path.into_inner();
 
-    let data = match BASE64_STANDARD.decode(&account.data) {
-        Ok(data) => data,
-        Err(_) => {
+    let accounts = accounts_req.iter().map(|account| {
+        let data = match BASE64_STANDARD.decode(&account.data) {
+            Ok(data) => data,
+            Err(_) => {
+                return Err("Invalid base64 data".to_string());
+            }
+        };
+        let owner = match Pubkey::from_str(&account.owner) {
+            Ok(owner) => owner,
+            Err(_) => {
+                return Err("Invalid owner".to_string());
+            }
+        };
+        let address = match Pubkey::from_str(&account.address) {
+            Ok(address) => address,
+            Err(_) => {
+                return Err("Invalid address".to_string());
+            }
+        };
+        Ok((
+            address,
+            Account {
+                lamports: account.lamports,
+                data: data,
+                owner: owner,
+                rent_epoch: account.rent_epoch,
+                executable: account.executable,
+            },
+        ))
+    });
+
+    let accounts: Vec<(Pubkey, Account)> = match accounts.collect() {
+        Ok(accounts) => accounts,
+        Err(e) => {
             return HttpResponse::BadRequest().json(json!({
-                "message": "Invalid base64 data"
+                "message": e
             }));
         }
     };
 
-    let owner = match Pubkey::from_str(&account.owner) {
-        Ok(owner) => owner,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(json!({
-                "message": "Invalid owner address"
-            }));
-        }
-    };
-
-    let address = match Pubkey::from_str(&account.address) {
-        Ok(address) => address,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(json!({
-                "message": "Invalid account address"
-            }));
-        }
-    };
-
-    let acc = Account {
-        lamports: account.lamports,
-        data: data,
-        owner: owner,
-        executable: false, //Must go through upload program to upload executable accounts
-        rent_epoch: account.rent_epoch,
-    };
-    match svm
-        .storage
-        .set_account(id, &address, acc, account.label.clone())
-    {
+    match svm.storage.set_accounts(id, accounts) {
         Ok(_) => HttpResponse::Ok().json(json!({
             "message": "Account loaded successfully"
         })),
