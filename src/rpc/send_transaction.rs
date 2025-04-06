@@ -1,6 +1,6 @@
 use serde_json::Value;
 use solana_rpc_client_api::config::RpcSendTransactionConfig;
-use solana_sdk::transaction::VersionedTransaction;
+use solana_sdk::{bpf_loader, bpf_loader_upgradeable, transaction::VersionedTransaction};
 use solana_transaction_status_client_types::UiTransactionEncoding;
 use uuid::Uuid;
 
@@ -78,6 +78,22 @@ pub fn send_transaction<T: Storage + Clone + 'static>(
             }));
         }
     };
+
+    if unsanitized_tx
+        .message
+        .instructions()
+        .iter()
+        .map(|ix| ix.program_id(unsanitized_tx.message.static_account_keys()))
+        .any(|program_id| {
+            program_id.to_owned() == bpf_loader::id()
+                || program_id.to_owned() == bpf_loader_upgradeable::id()
+        })
+    {
+        return Err(serde_json::json!({
+            "code": -32602,
+            "message": "Uploading programs is not allowed, please use the UI at https://app.mirror.ad to upload programs for now. This will be fixed in an update soon.",
+        }));
+    }
 
     if !skip_preflight {
         match svm.simulate_transaction(id, unsanitized_tx.clone()) {

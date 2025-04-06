@@ -1,6 +1,6 @@
 use base64::prelude::*;
 use serde_json::Value;
-use solana_sdk::account::AccountSharedData;
+use solana_sdk::{account::AccountSharedData, bpf_loader, bpf_loader_upgradeable};
 use uuid::Uuid;
 
 use crate::{
@@ -47,6 +47,22 @@ pub fn simulate_transaction<T: Storage + Clone + 'static>(
             }))
         }
     };
+
+    if tx
+        .message
+        .instructions()
+        .iter()
+        .map(|ix| ix.program_id(tx.message.static_account_keys()))
+        .any(|program_id| {
+            program_id.to_owned() == bpf_loader::id()
+                || program_id.to_owned() == bpf_loader_upgradeable::id()
+        })
+    {
+        return Err(serde_json::json!({
+            "code": -32602,
+            "message": "Uploading programs is not allowed, please use the UI at https://app.mirror.ad to upload programs for now. This will be fixed in an update soon.",
+        }));
+    }
 
     match svm.simulate_transaction(id, tx) {
         Ok(res) => {
