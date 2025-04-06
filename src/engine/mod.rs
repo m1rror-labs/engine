@@ -157,6 +157,17 @@ pub trait SVM<T: Storage + Clone + 'static> {
         req_id: u32,
     ) -> Result<mpsc::Receiver<Option<(u64, u64, u64)>>, String>;
     fn slot_unsubscribe(&self, req_id: u32) -> Result<(), String>;
+
+    fn logs_subscribe(
+        &self,
+        id: Uuid,
+        req_id: u32,
+        pubkey: &Pubkey,
+    ) -> Result<
+        mpsc::Receiver<Option<(Signature, Transaction, TransactionMeta, TransactionStatus)>>,
+        String,
+    >;
+    fn logs_unsubscribe(&self, req_id: u32) -> Result<(), String>;
 }
 
 #[derive(Clone)]
@@ -294,6 +305,103 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         Ok(rx)
     }
     fn slot_unsubscribe(&self, req_id: u32) -> Result<(), String> {
+        let mut sub_slots = self.subscribed_slots.try_write().unwrap();
+        let (idx, _) = match sub_slots.iter().find_position(|val| **val == req_id) {
+            Some(val) => val,
+            None => return Err("Subscription ID not found".to_string()),
+        };
+
+        sub_slots.remove(idx);
+        Ok(())
+    }
+    fn logs_subscribe(
+        &self,
+        id: Uuid,
+        req_id: u32,
+        pubkey: &Pubkey,
+    ) -> Result<
+        mpsc::Receiver<Option<(Signature, Transaction, TransactionMeta, TransactionStatus)>>,
+        String,
+    > {
+        let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
+        let mut interval = time::interval(Duration::from_millis(400));
+        let self_clone = self.clone();
+        let pubkey_clone = pubkey.clone();
+        self.subscribed_slots.try_write().unwrap().push(req_id);
+        let sub_slots = self.subscribed_slots.clone();
+        rt::spawn(async move {
+            loop {
+                interval.tick().await;
+                if !sub_slots.try_read().unwrap().contains(&req_id) {
+                    match tx.send(None).await {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    };
+                    break;
+                }
+                let now = Utc::now().naive_utc();
+                let start = now - Duration::from_millis(400);
+                let transactions = self_clone.storage.get_transactions_for_address_created_at(
+                    id,
+                    &pubkey_clone,
+                    start,
+                    now,
+                );
+                let transactions = match transactions {
+                    Ok(transactions) => transactions,
+                    Err(_) => {
+                        match tx.send(None).await {
+                            Ok(_) => {}
+                            Err(_) => {}
+                        };
+                        break;
+                    }
+                };
+
+                for db_transaction in transactions {
+                    let signature = match Signature::from_str(&db_transaction.signature) {
+                        Ok(signature) => signature,
+                        Err(_) => {
+                            match tx.send(None).await {
+                                Ok(_) => {}
+                                Err(_) => {}
+                            };
+                            break;
+                        }
+                    };
+                    let transaction = match self_clone.get_transaction(id, &signature) {
+                        Ok(transaction) => transaction,
+                        Err(_) => {
+                            match tx.send(None).await {
+                                Ok(_) => {}
+                                Err(_) => {}
+                            };
+                            break;
+                        }
+                    };
+                    if transaction == None {
+                        continue;
+                    }
+
+                    let (transaction, transaction_meta, transaction_status) = transaction.unwrap();
+
+                    tx.send(Some((
+                        signature,
+                        transaction,
+                        transaction_meta,
+                        transaction_status,
+                    )))
+                    .await
+                    .unwrap_or_else(|_| {
+                        println!("Failed to send transaction");
+                    });
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+    fn logs_unsubscribe(&self, req_id: u32) -> Result<(), String> {
         let mut sub_slots = self.subscribed_slots.try_write().unwrap();
         let (idx, _) = match sub_slots.iter().find_position(|val| **val == req_id) {
             Some(val) => val,

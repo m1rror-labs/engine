@@ -111,6 +111,13 @@ pub trait Storage {
         address: &Pubkey,
         limit: Option<usize>,
     ) -> Result<Vec<DbTransaction>, String>;
+    fn get_transactions_for_address_created_at(
+        &self,
+        id: Uuid,
+        address: &Pubkey,
+        start: chrono::NaiveDateTime,
+        end: chrono::NaiveDateTime,
+    ) -> Result<Vec<DbTransaction>, String>;
     fn get_transaction_count(&self, id: Uuid) -> Result<u64, String>;
 }
 
@@ -756,6 +763,33 @@ impl Storage for PgStorage {
             .filter(crate::schema::transactions::blockchain.eq(id))
             .select(crate::schema::transactions::all_columns)
             .limit(limit.unwrap_or(1000) as i64)
+            .load(&mut conn)
+            .map_err(|e| e.to_string())?;
+        Ok(transactions)
+    }
+    fn get_transactions_for_address_created_at(
+        &self,
+        id: Uuid,
+        address: &Pubkey,
+        start: chrono::NaiveDateTime,
+        end: chrono::NaiveDateTime,
+    ) -> Result<Vec<DbTransaction>, String> {
+        let mut conn = self.get_connection()?;
+        let transactions: Vec<DbTransaction> = crate::schema::transactions::table
+            .inner_join(
+                crate::schema::transaction_account_keys::table
+                    .on(crate::schema::transactions::signature
+                        .eq(crate::schema::transaction_account_keys::transaction_signature)),
+            )
+            .filter(crate::schema::transaction_account_keys::account.eq(address.to_string()))
+            .filter(crate::schema::transactions::blockchain.eq(id))
+            .filter(
+                crate::schema::transactions::created_at
+                    .ge(start)
+                    .and(crate::schema::transactions::created_at.le(end)),
+            )
+            .order(crate::schema::transactions::created_at.asc())
+            .select(crate::schema::transactions::all_columns)
             .load(&mut conn)
             .map_err(|e| e.to_string())?;
         Ok(transactions)

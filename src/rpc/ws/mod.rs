@@ -1,11 +1,15 @@
 use crate::{engine::SvmEngine, storage::Storage};
 use actix_ws::Session;
 use futures::TryFutureExt;
+use logs_subscribe::logs_subscribe;
+use logs_unsubscribe::logs_unsubscribe;
 use serde::Deserialize;
 use signature_subscribe::signature_subscribe;
 use slot_subscribe::slot_subscribe;
 use slot_unsubscribe::slot_unsubscribe;
 use uuid::Uuid;
+pub mod logs_subscribe;
+pub mod logs_unsubscribe;
 pub mod signature_subscribe;
 pub mod slot_subscribe;
 pub mod slot_unsubscribe;
@@ -86,24 +90,8 @@ pub async fn handle_ws_request<T: Storage + Clone + 'static>(
                 .map_err(|e| e.to_string())
                 .await?;
         }
-        RpcMethod::LogsSubscribe => {
-            session
-                .close(Some(actix_ws::CloseReason {
-                    code: actix_ws::CloseCode::Normal,
-                    description: Some("LogsSubscribe not implemented".into()),
-                }))
-                .map_err(|e| e.to_string())
-                .await?;
-        }
-        RpcMethod::LogsUnsubscribe => {
-            session
-                .close(Some(actix_ws::CloseReason {
-                    code: actix_ws::CloseCode::Normal,
-                    description: Some("LogsUnsubscribe not implemented".into()),
-                }))
-                .map_err(|e| e.to_string())
-                .await?;
-        }
+        RpcMethod::LogsSubscribe => logs_subscribe(id, &req, session, svm).await?,
+        RpcMethod::LogsUnsubscribe => logs_unsubscribe(&req, session, svm).await?,
         RpcMethod::ProgramSubscribe => {
             session
                 .close(Some(actix_ws::CloseReason {
