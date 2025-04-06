@@ -255,7 +255,7 @@ pub fn handle_request<T: Storage + Clone + 'static>(
           "samplePeriodSecs": 60,
           "slot": 348125
         }])),
-        RpcMethod::GetRecentPrioritizationFees => Err(serde_json::json!([{
+        RpcMethod::GetRecentPrioritizationFees => Ok(serde_json::json!([{
           "slot": 348125,
           "prioritizationFee": 0
         }])),
