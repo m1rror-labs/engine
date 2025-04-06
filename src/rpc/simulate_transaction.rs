@@ -60,7 +60,7 @@ pub fn simulate_transaction<T: Storage + Clone + 'static>(
     {
         return Err(serde_json::json!({
             "code": -32602,
-            "message": "Uploading programs is not allowed, please use the UI at https://app.mirror.ad to upload programs for now. This will be fixed in an update soon.",
+            "message": "Uploading programs is not allowed, please use the UI at https://app.mirror.ad to upload programs for now. If running anchor test, run anchor test --skip-deploy",
         }));
     }
 
