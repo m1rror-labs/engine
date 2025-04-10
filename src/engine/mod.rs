@@ -220,7 +220,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         commitment: TransactionConfirmationStatus,
     ) -> Result<u64, String> {
         println!("Subscribing to signature: {:?}", signature);
-        let mut interval = time::interval(Duration::from_millis(400));
+        let mut interval = time::interval(Duration::from_millis(100));
         loop {
             interval.tick().await;
             let tx = self.get_transaction(id, signature)?;
@@ -1258,16 +1258,8 @@ impl<T: Storage + Clone + 'static> Loader<T> {
     }
 }
 
-pub fn tx_confirmation_status(time: chrono::DateTime<Utc>) -> TransactionConfirmationStatus {
-    let now = Utc::now();
-    let duration = now - time;
-    if duration.num_seconds() > 1 && duration.num_seconds() <= 2 {
-        TransactionConfirmationStatus::Confirmed
-    } else if duration.num_seconds() > 3 {
-        TransactionConfirmationStatus::Finalized
-    } else {
-        TransactionConfirmationStatus::Processed
-    }
+pub fn tx_confirmation_status(_time: chrono::DateTime<Utc>) -> TransactionConfirmationStatus {
+    return TransactionConfirmationStatus::Finalized;
 }
 
 pub fn status_is_greater(
