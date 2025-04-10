@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::time::Instant;
 
 use accounts::{DbAccount, DbConfigAccount};
+use actix_web::rt;
 use bigdecimal::{BigDecimal, ToPrimitive};
 use blocks::{DbBlock, DbBlockchain};
 use chrono::Utc;
@@ -89,7 +91,6 @@ pub trait Storage {
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
     fn set_blockchain(&self, blockchain: &Blockchain) -> Result<Uuid, String>;
-
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String>;
     fn get_transaction(
         &self,
@@ -320,27 +321,29 @@ impl Storage for PgStorage {
             .iter()
             .map(|(address, account)| DbAccount::from_account(address, account, None, id))
             .collect();
-        conn.transaction::<_, diesel::result::Error, _>(|conn| {
-            diesel::insert_into(crate::schema::accounts::table)
-                .values(db_accounts)
-                .on_conflict((
-                    crate::schema::accounts::address,
-                    crate::schema::accounts::blockchain,
-                ))
-                .do_update()
-                .set((
-                    crate::schema::accounts::lamports
-                        .eq(excluded(crate::schema::accounts::lamports)),
-                    crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
-                    crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
-                    crate::schema::accounts::executable
-                        .eq(excluded(crate::schema::accounts::executable)),
-                    crate::schema::accounts::rent_epoch
-                        .eq(excluded(crate::schema::accounts::rent_epoch)),
-                ))
-                .execute(conn)
-        })
-        .map_err(|e| e.to_string())?;
+        rt::spawn(async move {
+            conn.transaction::<_, diesel::result::Error, _>(|conn| {
+                diesel::insert_into(crate::schema::accounts::table)
+                    .values(db_accounts)
+                    .on_conflict((
+                        crate::schema::accounts::address,
+                        crate::schema::accounts::blockchain,
+                    ))
+                    .do_update()
+                    .set((
+                        crate::schema::accounts::lamports
+                            .eq(excluded(crate::schema::accounts::lamports)),
+                        crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
+                        crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
+                        crate::schema::accounts::executable
+                            .eq(excluded(crate::schema::accounts::executable)),
+                        crate::schema::accounts::rent_epoch
+                            .eq(excluded(crate::schema::accounts::rent_epoch)),
+                    ))
+                    .execute(conn)
+            })
+            .unwrap();
+        });
         Ok(())
     }
 
@@ -517,60 +520,71 @@ impl Storage for PgStorage {
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String> {
         let mut conn = self.get_connection()?;
+        let start = Instant::now();
 
-        conn.transaction::<_, diesel::result::Error, _>(|conn| {
+        println!(
+            "Transaction inserted in {:?} ms",
+            start.elapsed().as_millis()
+        );
+        let db_tx = DbTransaction::from_transaction(id, &tx);
+        let db_accounts = DbTransactionAccountKey::from_transaction(tx);
+        let db_ix = DbTransactionInstruction::from_transaction(tx);
+        let db_log = DbTransactionLogMessage::from_transaction(tx);
+        let db_signature = DbTransactionSignature::from_transaction(tx);
+        let db_meta = DbTransactionMeta::from_transaction(tx);
+        let mut token_balances: Vec<DBTransactionTokenBalance> = Vec::new();
+        if let Some(pre_balances) = &tx.pre_token_balances {
+            for pre_balance in pre_balances {
+                token_balances.push(DBTransactionTokenBalance::from_token_balance(
+                    pre_balance,
+                    &tx.signature.to_string(),
+                    true,
+                ));
+            }
+        }
+        if let Some(post_balances) = &tx.post_token_balances {
+            for post_balance in post_balances {
+                token_balances.push(DBTransactionTokenBalance::from_token_balance(
+                    post_balance,
+                    &tx.signature.to_string(),
+                    false,
+                ));
+            }
+        }
+
+        rt::spawn(async move {
             diesel::insert_into(crate::schema::transactions::table)
-                .values(DbTransaction::from_transaction(id, tx))
-                .execute(conn)?;
-
-            diesel::insert_into(crate::schema::transaction_account_keys::table)
-                .values(DbTransactionAccountKey::from_transaction(tx))
-                .execute(conn)?;
-
-            diesel::insert_into(crate::schema::transaction_instructions::table)
-                .values(DbTransactionInstruction::from_transaction(tx))
-                .execute(conn)?;
-
-            diesel::insert_into(crate::schema::transaction_log_messages::table)
-                .values(DbTransactionLogMessage::from_transaction(tx))
-                .execute(conn)?;
-
+                .values(db_tx)
+                .execute(&mut conn)
+                .map_err(|e| e.to_string())
+                .unwrap();
             diesel::insert_into(crate::schema::transaction_meta::table)
-                .values(DbTransactionMeta::from_transaction(tx))
-                .execute(conn)?;
-
+                .values(db_meta)
+                .execute(&mut conn)
+                .unwrap();
+            diesel::insert_into(crate::schema::transaction_account_keys::table)
+                .values(db_accounts)
+                .execute(&mut conn)
+                .unwrap();
+            diesel::insert_into(crate::schema::transaction_instructions::table)
+                .values(db_ix)
+                .execute(&mut conn)
+                .unwrap();
+            diesel::insert_into(crate::schema::transaction_log_messages::table)
+                .values(db_log)
+                .execute(&mut conn)
+                .unwrap();
             diesel::insert_into(crate::schema::transaction_signatures::table)
-                .values(DbTransactionSignature::from_transaction(tx))
-                .execute(conn)?;
-
-            let mut token_balances: Vec<DBTransactionTokenBalance> = Vec::new();
-            if let Some(pre_balances) = &tx.pre_token_balances {
-                for pre_balance in pre_balances {
-                    token_balances.push(DBTransactionTokenBalance::from_token_balance(
-                        pre_balance,
-                        &tx.signature.to_string(),
-                        true,
-                    ));
-                }
-            }
-            if let Some(post_balances) = &tx.post_token_balances {
-                for post_balance in post_balances {
-                    token_balances.push(DBTransactionTokenBalance::from_token_balance(
-                        post_balance,
-                        &tx.signature.to_string(),
-                        false,
-                    ));
-                }
-            }
+                .values(db_signature)
+                .execute(&mut conn)
+                .unwrap();
             if token_balances.len() > 0 {
                 diesel::insert_into(crate::schema::transaction_token_balances::table)
                     .values(token_balances)
-                    .execute(conn)?;
-            }
-            Ok(())
-        })
-        .map_err(|e| e.to_string())?;
-        // save transaction
+                    .execute(&mut conn)
+                    .unwrap();
+            };
+        });
 
         Ok(())
     }
@@ -716,7 +730,13 @@ impl Storage for PgStorage {
             .map(|i| i.to_instruction(account_keys.clone()))
             .collect::<Vec<Instruction>>();
 
-        let tx_meta = metas.first().ok_or_else(|| "No meta found".to_string())?;
+        let tx_meta = metas.first();
+        let tx_meta = match tx_meta {
+            Some(meta) => meta,
+            None => {
+                return Ok(None);
+            }
+        };
 
         let tx = Transaction {
             signatures: signatures
