@@ -42,7 +42,7 @@ use solana_sdk::{
     transaction_context::{ExecutionRecord, IndexOfAccount, TransactionContext},
 };
 
-use spl::load_spl_programs;
+use spl::generate_spl_programs;
 use spl_token::state::Account as SplAccount;
 use spl_token::state::Mint;
 use std::{
@@ -77,7 +77,6 @@ pub trait SVM<T: Storage + Clone + 'static> {
         label: Option<String>,
         expiry: Option<chrono::NaiveDateTime>,
         config: Option<Uuid>,
-        defer_account_initialization: bool,
     ) -> Result<Uuid, String>;
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
@@ -141,8 +140,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
         tx: VersionedTransaction,
     ) -> Result<TransactionMetadata, String>;
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String>;
-    fn add_program(&self, id: Uuid, program_id: Pubkey, program_bytes: &[u8])
-        -> Result<(), String>;
+    fn add_program(&self, program_id: Pubkey, program_bytes: &[u8]) -> (Pubkey, Account);
 
     #[allow(async_fn_in_trait)]
     async fn signature_subscribe(
@@ -419,7 +417,6 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         label: Option<String>,
         expiry: Option<chrono::NaiveDateTime>,
         config: Option<Uuid>,
-        defer_account_initialization: bool,
     ) -> Result<Uuid, String> {
         let keypair = match airdrop_keypair {
             Some(k) => k,
@@ -436,149 +433,65 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         };
 
         let id = self.storage.set_blockchain(&blockchain)?;
-        let self_clone = self.clone();
+        let mut hasher = Sha256::new();
+        hasher.update(id.as_bytes());
+        let hash_array = hasher.finalize();
+        let hash = Hash::new_from_array(hash_array.into());
+        match self.storage.set_block(
+            id,
+            &Block {
+                blockhash: hash,
+                block_time: 0,
+                previous_blockhash: Hash::default(),
+                block_height: 0,
+                parent_slot: 0,
+                transactions: vec![],
+            },
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                println!("Error setting genesis block: {:?}", e);
+                return Err(e);
+            }
+        };
+        let mut accounts_to_upload: Vec<(Pubkey, Account)> = vec![];
         if config.is_some() {
             let config_id = config.unwrap();
-            let accounts = self_clone
+            let accounts = self
                 .storage
                 .get_config_accounts(config_id)
                 .expect("Failed to get config accounts");
             accounts.iter().for_each(|(pubkey, account)| {
-                self_clone
-                    .storage
-                    .set_account(id, pubkey, account.clone(), None)
-                    .unwrap();
+                accounts_to_upload.push((pubkey.clone(), account.clone()));
             });
         }
-        if defer_account_initialization {
-            rt::spawn(async move {
-                let mut hasher = Sha256::new();
-                hasher.update(id.as_bytes());
-                let hash_array = hasher.finalize();
-                let hash = Hash::new_from_array(hash_array.into());
-                match self_clone.storage.set_block(
-                    id,
-                    &Block {
-                        blockhash: hash,
-                        block_time: 0,
-                        previous_blockhash: Hash::default(),
-                        block_height: 0,
-                        parent_slot: 0,
-                        transactions: vec![],
-                    },
-                ) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        println!("Error setting genesis block: {:?}", e);
-                        return;
-                    }
-                };
-                match self_clone.save_sysvars(id) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        println!("Error saving sysvars: {:?}", e);
-                        return;
-                    }
-                };
-                match self_clone.storage.set_account(
-                    id,
-                    &keypair.pubkey(),
-                    Account {
-                        lamports: 1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL),
-                        data: vec![],
-                        owner: system_program::id(),
-                        executable: false,
-                        rent_epoch: 100000000000,
-                    },
-                    None,
-                ) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        println!("Error setting airdrop account: {:?}", e);
-                        return;
-                    }
-                };
-                BUILTINS.iter().for_each(|builtint| {
-                    let mut account: Account =
-                        native_loader::create_loadable_account_for_test(builtint.name).into();
-                    account.rent_epoch = 1000000;
-                    self_clone
-                        .storage
-                        .set_account(id, &builtint.program_id, account, None)
-                        .expect("Failed to set builtin account");
-                });
-                match load_spl_programs(&self_clone, id) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        println!("Error loading SPL programs: {:?}", e);
-                        return;
-                    }
-                };
-            });
-        } else {
-            let mut hasher = Sha256::new();
-            hasher.update(id.as_bytes());
-            let hash_array = hasher.finalize();
-            let hash = Hash::new_from_array(hash_array.into());
-            match self_clone.storage.set_block(
-                id,
-                &Block {
-                    blockhash: hash,
-                    block_time: 0,
-                    previous_blockhash: Hash::default(),
-                    block_height: 0,
-                    parent_slot: 0,
-                    transactions: vec![],
-                },
-            ) {
-                Ok(_) => {}
-                Err(e) => {
-                    println!("Error setting genesis block: {:?}", e);
-                    return Err(e);
-                }
-            };
-            match self_clone.save_sysvars(id) {
-                Ok(_) => {}
-                Err(e) => {
-                    println!("Error saving sysvars: {:?}", e);
-                    return Err(e);
-                }
-            };
-            match self_clone.storage.set_account(
-                id,
-                &keypair.pubkey(),
-                Account {
-                    lamports: 1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL),
-                    data: vec![],
-                    owner: system_program::id(),
-                    executable: false,
-                    rent_epoch: 100000000000,
-                },
-                None,
-            ) {
-                Ok(_) => {}
-                Err(e) => {
-                    println!("Error setting airdrop account: {:?}", e);
-                    return Err(e);
-                }
-            };
-            BUILTINS.iter().for_each(|builtint| {
-                let mut account: Account =
-                    native_loader::create_loadable_account_for_test(builtint.name).into();
-                account.rent_epoch = 1000000;
-                self_clone
-                    .storage
-                    .set_account(id, &builtint.program_id, account, None)
-                    .expect("Failed to set builtin account");
-            });
-            match load_spl_programs(&self_clone, id) {
-                Ok(_) => {}
-                Err(e) => {
-                    println!("Error loading SPL programs: {:?}", e);
-                    return Err(e);
-                }
-            };
-        }
+
+        let mut sysvars = self.get_sysvars();
+        sysvars.iter_mut().for_each(|(pubkey, account)| {
+            accounts_to_upload.push((pubkey.clone(), account.clone()));
+        });
+        accounts_to_upload.push((
+            keypair.pubkey(),
+            Account {
+                lamports: 1_000_000u64.wrapping_mul(LAMPORTS_PER_SOL),
+                data: vec![],
+                owner: system_program::id(),
+                executable: false,
+                rent_epoch: 100000000000,
+            },
+        ));
+        BUILTINS.iter().for_each(|builtint| {
+            let mut account: Account =
+                native_loader::create_loadable_account_for_test(builtint.name).into();
+            account.rent_epoch = 1000000;
+            accounts_to_upload.push((builtint.program_id, account));
+        });
+        let program_accounts = generate_spl_programs(self);
+        program_accounts.iter().for_each(|(pubkey, account)| {
+            accounts_to_upload.push((pubkey.clone(), account.clone()));
+        });
+
+        self.storage.set_accounts_sync(id, accounts_to_upload)?;
 
         Ok(id)
     }
@@ -878,12 +791,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         self.send_transaction(id, tx)
     }
 
-    fn add_program(
-        &self,
-        id: Uuid,
-        program_id: Pubkey,
-        program_bytes: &[u8],
-    ) -> Result<(), String> {
+    fn add_program(&self, program_id: Pubkey, program_bytes: &[u8]) -> (Pubkey, Account) {
         let program_len = program_bytes.len();
         let lamports = self.minimum_balance_for_rent_exemption(program_len);
         let account = Account {
@@ -893,8 +801,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             executable: true,
             rent_epoch: 100000000,
         };
-        self.storage.set_account(id, &program_id, account, None)?;
-        Ok(())
+        (program_id, account)
     }
 }
 
@@ -911,15 +818,12 @@ impl<T: Storage + Clone + 'static> SvmEngine<T> {
         self.sysvar_cache.set_sysvar_for_tests(sysvar);
     }
 
-    pub fn save_sysvar<S>(&self, id: Uuid, sysvar: &S) -> Result<(), String>
+    pub fn get_sysvar<S>(&self, sysvar: &S) -> (Pubkey, Account)
     where
         S: Sysvar + SysvarId,
     {
         let account = AccountSharedData::new_data(1, &sysvar, &solana_sdk::sysvar::id()).unwrap();
-        self.storage
-            .set_account(id, &S::id(), account.into(), None)
-            .unwrap();
-        Ok(())
+        (S::id(), account.into())
     }
 
     fn set_sysvars(&mut self) {
@@ -931,15 +835,16 @@ impl<T: Storage + Clone + 'static> SvmEngine<T> {
         // self.set_sysvar(&SlotHistory::default());
         self.set_sysvar(&StakeHistory::default());
     }
-    fn save_sysvars(&self, id: Uuid) -> Result<(), String> {
-        self.save_sysvar(id, &Clock::default())?;
-        self.save_sysvar(id, &EpochRewards::default())?;
-        self.save_sysvar(id, &EpochSchedule::default())?;
-        self.save_sysvar(id, &LastRestartSlot::default())?;
-        self.save_sysvar(id, &Rent::default())?;
-        self.save_sysvar(id, &SlotHistory::default())?;
-        self.save_sysvar(id, &StakeHistory::default())?;
-        Ok(())
+    fn get_sysvars(&self) -> Vec<(Pubkey, Account)> {
+        let mut sysvars = vec![];
+        sysvars.push(self.get_sysvar(&Clock::default()));
+        sysvars.push(self.get_sysvar(&EpochRewards::default()));
+        sysvars.push(self.get_sysvar(&EpochSchedule::default()));
+        sysvars.push(self.get_sysvar(&LastRestartSlot::default()));
+        sysvars.push(self.get_sysvar(&Rent::default()));
+        sysvars.push(self.get_sysvar(&SlotHistory::default()));
+        sysvars.push(self.get_sysvar(&StakeHistory::default()));
+        sysvars
     }
 }
 

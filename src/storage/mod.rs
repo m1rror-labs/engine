@@ -56,6 +56,7 @@ pub trait Storage {
     fn set_account_lamports(&self, id: Uuid, address: &Pubkey, lamports: u64)
         -> Result<(), String>;
     fn set_accounts(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String>;
+    fn set_accounts_sync(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String>;
     fn get_token_accounts_by_owner(
         &self,
         id: Uuid,
@@ -344,6 +345,37 @@ impl Storage for PgStorage {
             })
             .unwrap();
         });
+        Ok(())
+    }
+
+    fn set_accounts_sync(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String> {
+        let mut conn = self.get_connection()?;
+        let db_accounts: Vec<DbAccount> = accounts
+            .iter()
+            .map(|(address, account)| DbAccount::from_account(address, account, None, id))
+            .collect();
+        conn.transaction::<_, diesel::result::Error, _>(|conn| {
+            diesel::insert_into(crate::schema::accounts::table)
+                .values(db_accounts)
+                .on_conflict((
+                    crate::schema::accounts::address,
+                    crate::schema::accounts::blockchain,
+                ))
+                .do_update()
+                .set((
+                    crate::schema::accounts::lamports
+                        .eq(excluded(crate::schema::accounts::lamports)),
+                    crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
+                    crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
+                    crate::schema::accounts::executable
+                        .eq(excluded(crate::schema::accounts::executable)),
+                    crate::schema::accounts::rent_epoch
+                        .eq(excluded(crate::schema::accounts::rent_epoch)),
+                ))
+                .execute(conn)
+        })
+        .map_err(|e| e.to_string())?;
+
         Ok(())
     }
 

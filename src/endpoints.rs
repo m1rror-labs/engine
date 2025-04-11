@@ -149,7 +149,8 @@ pub async fn load_program(
         }
     };
 
-    match svm.add_program(id, program_id, &program_data) {
+    let (pubkey, account) = svm.add_program(program_id, &program_data);
+    match svm.storage.set_account(id, &pubkey, account, None) {
         Ok(_) => HttpResponse::Ok().json(json!({
             "message": "Program loaded successfully"
         })),
@@ -240,7 +241,7 @@ pub async fn load_account(
         }
     };
 
-    match svm.storage.set_accounts(id, accounts) {
+    match svm.storage.set_accounts_sync(id, accounts) {
         Ok(_) => HttpResponse::Ok().json(json!({
             "message": "Account loaded successfully"
         })),
@@ -314,21 +315,7 @@ pub async fn create_blockchain(
         Some(req) => req.config,
         None => None,
     };
-    let defer_account_initailization = match &req {
-        Some(req) => match req.defer_account_initailization {
-            Some(defer_account_initailization) => defer_account_initailization,
-            None => false,
-        },
-        None => false,
-    };
-    let id = svm.create_blockchain(
-        team.id,
-        None,
-        label,
-        expiry,
-        config,
-        defer_account_initailization,
-    );
+    let id = svm.create_blockchain(team.id, None, label, expiry, config);
     match id {
         Ok(id) => {
             let mut base_url = "https://rpc.mirror.ad/rpc/";
