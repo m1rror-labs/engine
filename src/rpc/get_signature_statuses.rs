@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde_json::Value;
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
 use solana_sdk::transaction::Transaction;
@@ -15,6 +16,10 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
+    println!(
+        "get_signature_statuses timestamp: {:?}",
+        Utc::now().to_rfc3339()
+    );
     let sig_raw_arr = match req
         .params
         .as_ref()
@@ -53,18 +58,22 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
             String,
         >>()?;
 
-    let slot = match svm.get_latest_block(id) {
-        Ok(slot) => slot,
-        Err(_) => {
-            return Err(serde_json::json!({
-                "code": -32002,
-                "message": "Failed to get latest block",
-            }))
-        }
-    };
+    // let slot = match svm.get_latest_block(id) {
+    //     Ok(slot) => slot,
+    //     Err(_) => {
+    //         return Err(serde_json::json!({
+    //             "code": -32002,
+    //             "message": "Failed to get latest block",
+    //         }))
+    //     }
+    // };
 
+    println!(
+        "get_signature_statuses timestamp: {:?}",
+        Utc::now().to_rfc3339()
+    );
     Ok(serde_json::json!({
-        "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
+        "context": { "slot": 100,"apiVersion":"2.1.13" },
         "value": txs
         .iter()
         .map(|tx| match tx {
@@ -82,7 +91,7 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
                     }
                 };
                 serde_json::json!({
-                    "slot": status.slot,
+                    "slot": status.slot-1,
                     "confirmations": null,
                     "err": status.err,
                     "status": status_value,
