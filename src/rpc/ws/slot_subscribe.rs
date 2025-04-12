@@ -35,24 +35,28 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
             return Err(e);
         }
     };
-    let mut count = 1;
 
     loop {
         let res = match receiver.recv().await {
             Some(res) => res,
-            None => return Ok(()),
+            None => {
+                println!("Receiver closed 1");
+                return Ok(());
+            }
         };
         let (parent, root, slot) = match res {
             Some(res) => res,
-            None => return Ok(()),
+            None => {
+                println!("Receiver closed 2");
+                return Ok(());
+            }
         };
-        count = count + 1;
+
         println!(
-            "parent: {}, root: {}, slot: {}, count: {}, current time: {}",
+            "parent: {}, root: {}, slot: {}, current time: {}",
             parent,
             root,
             slot,
-            count,
             chrono::Utc::now().to_rfc3339()
         );
 

@@ -268,16 +268,18 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         );
         rt::spawn(async move {
             loop {
-                if !sub_slots.try_read().unwrap().contains(&req_id) {
-                    match tx.send(None).await {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    };
-                    break;
-                }
+                // if !sub_slots.try_read().unwrap().contains(&req_id) {
+                println!("Here 1");
+                match tx.send(None).await {
+                    Ok(_) => {}
+                    Err(_) => {}
+                };
+                break;
+                // }
                 let next_block_read = match self_clone.latest_blockhash(id) {
                     Ok(slot) => slot,
                     Err(_) => {
+                        println!("Here 2");
                         match tx.send(None).await {
                             Ok(_) => {}
                             Err(_) => {}
@@ -287,6 +289,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 };
                 println!("Latest block: {:?}", next_block_read.block_height);
                 if next_block_read.block_height > initial_slot + 1 {
+                    println!("Here 3");
                     match tx.send(None).await {
                         Ok(_) => {}
                         Err(_) => {}
