@@ -622,9 +622,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             transactions: vec![],
         };
         let self_clone = self.clone();
-        rt::spawn(async move {
-            self_clone.storage.set_block(id, &next_block).unwrap();
-        });
+        self_clone.storage.set_block(id, &next_block).unwrap();
 
         Ok(block)
     }
