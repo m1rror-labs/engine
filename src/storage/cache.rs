@@ -67,33 +67,18 @@ impl Cache {
             .client
             .get_connection()
             .map_err(|e| format!("Failed to get connection: {}", e))?;
-
-        // Prepare key-value pairs for MSET
-        let key_value_pairs: Vec<(String, String)> = accounts
-            .into_iter()
-            .map(|account| {
-                let key = format!(
-                    "blockchain:{}:account:{}",
-                    blockchain.to_string(),
-                    account.address,
-                );
-                let serialized_account = serde_json::to_string(&account)
-                    .map_err(|e| format!("Failed to serialize account: {}", e))?;
-                Ok((key, serialized_account))
-            })
-            .collect::<Result<Vec<(String, String)>, String>>()?;
-
-        // Flatten the key-value pairs into a single vector for MSET
-        let flattened: Vec<String> = key_value_pairs
-            .into_iter()
-            .flat_map(|(key, value)| vec![key, value])
-            .collect();
-
-        // Execute MSET
-        let _: () = redis::cmd("MSET")
-            .arg(flattened)
-            .query(&mut con)
-            .map_err(|e| format!("Failed to execute MSET: {}", e))?;
+        for account in accounts {
+            let key = format!(
+                "blockchain:{}:account:{}",
+                blockchain.to_string(),
+                account.address,
+            );
+            let serialized_account = serde_json::to_string(&account)
+                .map_err(|e| format!("Failed to deserialize: {}", e))?;
+            let _: () = con
+                .set(key, serialized_account)
+                .map_err(|e| format!("Failed to save key: {}", e))?;
+        }
         Ok(())
     }
 
@@ -129,31 +114,21 @@ impl Cache {
             .client
             .get_connection()
             .map_err(|e| format!("Failed to get connection: {}", e))?;
-
-        // Prepare the keys for MGET
-        let keys: Vec<String> = addresses
-            .iter()
-            .map(|address| format!("blockchain:{}:account:{}", blockchain, address))
-            .collect();
-
-        // Execute MGET to fetch all keys
-        let raw_jsons: Vec<Option<String>> = redis::cmd("MGET")
-            .arg(keys)
-            .query(&mut con)
-            .map_err(|e| format!("Failed to execute MGET: {}", e))?;
-
-        // Deserialize the results into DbAccount objects
-        let accounts: Vec<Option<DbAccount>> = raw_jsons
-            .into_iter()
-            .map(|raw_json| {
-                raw_json
-                    .map(|json| {
-                        serde_json::from_str::<DbAccount>(&json)
-                            .map_err(|e| format!("Failed to deserialize: {}", e))
-                    })
-                    .transpose()
-            })
-            .collect::<Result<Vec<Option<DbAccount>>, String>>()?;
+        let mut accounts = Vec::new();
+        for address in addresses {
+            let key = format!("blockchain:{}:account:{}", blockchain, address);
+            let raw_json: Option<String> = con
+                .get(&key)
+                .map_err(|e| format!("Failed to scan keys: {}", e))?;
+            let account = match raw_json {
+                Some(json) => Some(
+                    serde_json::from_str::<DbAccount>(&json)
+                        .map_err(|e| format!("Failed to deserialize: {}", e))?,
+                ),
+                None => None,
+            };
+            accounts.push(account);
+        }
         Ok(accounts)
     }
 
