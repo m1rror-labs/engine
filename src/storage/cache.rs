@@ -114,21 +114,32 @@ impl Cache {
             .client
             .get_connection()
             .map_err(|e| format!("Failed to get connection: {}", e))?;
-        let mut accounts = Vec::new();
-        for address in addresses {
-            let key = format!("blockchain:{}:account:{}", blockchain, address);
-            let raw_json: Option<String> = con
-                .get(&key)
-                .map_err(|e| format!("Failed to scan keys: {}", e))?;
-            let account = match raw_json {
-                Some(json) => Some(
-                    serde_json::from_str::<DbAccount>(&json)
-                        .map_err(|e| format!("Failed to deserialize: {}", e))?,
-                ),
-                None => None,
-            };
-            accounts.push(account);
-        }
+
+        // Prepare the keys for MGET
+        let keys: Vec<String> = addresses
+            .iter()
+            .map(|address| format!("blockchain:{}:account:{}", blockchain, address))
+            .collect();
+
+        // Execute MGET to fetch all keys in a single request
+        let raw_jsons: Vec<Option<String>> = redis::cmd("MGET")
+            .arg(keys)
+            .query(&mut con)
+            .map_err(|e| format!("Failed to execute MGET: {}", e))?;
+
+        // Deserialize the results into DbAccount objects
+        let accounts: Vec<Option<DbAccount>> = raw_jsons
+            .into_iter()
+            .map(|raw_json| {
+                raw_json
+                    .map(|json| {
+                        serde_json::from_str::<DbAccount>(&json)
+                            .map_err(|e| format!("Failed to deserialize: {}", e))
+                    })
+                    .transpose()
+            })
+            .collect::<Result<Vec<Option<DbAccount>>, String>>()?;
+
         Ok(accounts)
     }
 

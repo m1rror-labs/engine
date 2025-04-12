@@ -136,6 +136,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         id: Uuid,
         raw_tx: VersionedTransaction,
     ) -> Result<(), String> {
+        let start = std::time::Instant::now();
         let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
 
         let tx = match SanitizedTransaction::try_create(
@@ -151,6 +152,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
 
         let (current_block, valid_blockhash) =
             self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
+        println!("Blockhash loaded in {}ms", start.elapsed().as_millis());
         // if !valid_blockhash {
         //     return Err("Blockhash is not valid".to_string());
         // };
@@ -158,6 +160,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
         let accounts_vec = self.storage.get_accounts(id, &addresses)?;
+        println!("Accounts loaded in {}ms", start.elapsed().as_millis());
 
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
@@ -244,7 +247,9 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             post_token_balances,
         };
 
+        println!("Transaction processed in {}ms", start.elapsed().as_millis());
         self.storage.save_transaction(id, &meta)?;
+        println!("Transaction saved in {}ms", start.elapsed().as_millis());
 
         self.storage.set_accounts(
             id,
@@ -253,6 +258,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 .map(|(pubkey, account_shared_data)| (pubkey, Account::from(account_shared_data)))
                 .collect(),
         )?;
+        println!("Accounts saved in {}ms", start.elapsed().as_millis());
 
         Ok(())
     }
