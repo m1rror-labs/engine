@@ -787,6 +787,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     }
 
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
+        println!("Current date/time is airdrop: {}", Utc::now().to_rfc3339());
         let existing_account = self.get_account(id, pubkey)?;
         let mut account = match existing_account {
             Some(account) => account,
