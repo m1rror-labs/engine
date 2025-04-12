@@ -223,9 +223,8 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         signature: &Signature,
         commitment: TransactionConfirmationStatus,
     ) -> Result<u64, String> {
-        let mut interval = time::interval(Duration::from_millis(500));
+        let mut interval = time::interval(Duration::from_millis(50));
         loop {
-            interval.tick().await;
             let tx = self.get_transaction(id, signature)?;
             if tx == None {
                 continue;
@@ -236,9 +235,14 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 }
                 let confirmation_status = status.confirmation_status.unwrap();
                 if status_is_greater(&commitment, &confirmation_status) {
+                    println!(
+                        "Current time signature passed {:?}",
+                        Utc::now().to_rfc3339()
+                    );
                     return Ok(status.slot);
                 }
             }
+            interval.tick().await;
         }
     }
 

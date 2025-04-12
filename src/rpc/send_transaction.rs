@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde_json::Value;
 use solana_rpc_client_api::config::RpcSendTransactionConfig;
 use solana_sdk::{bpf_loader, bpf_loader_upgradeable, transaction::VersionedTransaction};
@@ -16,6 +17,10 @@ pub fn send_transaction<T: Storage + Clone + 'static>(
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
+    println!(
+        "Current date/time is sending tx: {}",
+        Utc::now().to_rfc3339()
+    );
     let tx_data = match req
         .params
         .as_ref()
@@ -106,7 +111,10 @@ pub fn send_transaction<T: Storage + Clone + 'static>(
             }
         }
     }
-
+    println!(
+        "Current date/time about to send tx: {}",
+        Utc::now().to_rfc3339()
+    );
     match svm.send_transaction(id, unsanitized_tx) {
         Ok(res) => Ok(serde_json::json!(res)),
         Err(e) => Err(serde_json::json!({

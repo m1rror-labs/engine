@@ -259,7 +259,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 .collect(),
         )?;
         println!("Accounts saved in {}ms", start.elapsed().as_millis());
-
+        println!("Current date/time is: {}", Utc::now().to_rfc3339());
         Ok(())
     }
 
