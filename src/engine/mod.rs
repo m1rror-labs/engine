@@ -24,7 +24,7 @@ use solana_sdk::{
     instruction::{CompiledInstruction, TRANSACTION_LEVEL_STACK_HEIGHT},
     message::{
         v0::{LoadedAddresses, MessageAddressTableLookup},
-        AddressLoader, Message, SanitizedMessage, VersionedMessage,
+        AddressLoader, SanitizedMessage, VersionedMessage,
     },
     native_loader,
     native_token::LAMPORTS_PER_SOL,
@@ -32,14 +32,19 @@ use solana_sdk::{
     program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
+    reserved_account_keys::ReservedAccountKeys,
     signature::{Keypair, Signature},
     signer::Signer,
     slot_history::SlotHistory,
     stake_history::StakeHistory,
     system_instruction, system_program,
     sysvar::{self, instructions::construct_instructions_data, Sysvar, SysvarId},
-    transaction::{SanitizedTransaction, Transaction, TransactionError, VersionedTransaction},
-    transaction_context::{ExecutionRecord, IndexOfAccount, TransactionContext},
+    transaction::{
+        MessageHash, SanitizedTransaction, Transaction, TransactionError, VersionedTransaction,
+    },
+    transaction_context::{
+        ExecutionRecord, IndexOfAccount, TransactionContext, TransactionReturnData,
+    },
 };
 
 use spl::generate_spl_programs;
@@ -50,6 +55,7 @@ use std::{
     str::FromStr,
     sync::{Arc, RwLock},
     time::Duration,
+    vec,
 }; // Add this import at the top of your file
 use tokens::TokenAmount;
 use tokio::sync::mpsc;
@@ -217,8 +223,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         signature: &Signature,
         commitment: TransactionConfirmationStatus,
     ) -> Result<u64, String> {
-        println!("Subscribing to signature: {:?}", signature);
-        let mut interval = time::interval(Duration::from_millis(100));
+        let mut interval = time::interval(Duration::from_millis(500));
         loop {
             interval.tick().await;
             let tx = self.get_transaction(id, signature)?;
@@ -226,8 +231,6 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 continue;
             }
             if let Some((_, _, status)) = tx {
-                println!("Transaction status: {:?}", status);
-                println!("Commitment: {:?}", commitment);
                 if status.confirmation_status == None {
                     continue;
                 }
@@ -245,7 +248,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         req_id: u32,
     ) -> Result<mpsc::Receiver<Option<(u64, u64, u64)>>, String> {
         let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
-        let mut interval = time::interval(Duration::from_millis(400));
+        let mut interval = time::interval(Duration::from_millis(50));
         let latest_block = match self.latest_blockhash(id) {
             Ok(slot) => slot,
             Err(e) => return Err(e),
@@ -275,7 +278,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                         break;
                     }
                 };
-                if next_block_read.block_height > initial_slot + 3 {
+                if next_block_read.block_height > initial_slot + 1 {
                     match tx.send(None).await {
                         Ok(_) => {}
                         Err(_) => {}
@@ -322,7 +325,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         String,
     > {
         let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
-        let mut interval = time::interval(Duration::from_millis(400));
+        let mut interval = time::interval(Duration::from_millis(50));
         let self_clone = self.clone();
         let pubkey_clone = pubkey.clone();
         self.subscribed_slots.try_write().unwrap().push(req_id);
@@ -338,7 +341,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     break;
                 }
                 let now = Utc::now().naive_utc();
-                let start = now - Duration::from_millis(400);
+                let start = now - Duration::from_millis(50);
                 let transactions = self_clone.storage.get_transactions_for_address_created_at(
                     id,
                     &pubkey_clone,
@@ -614,10 +617,12 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             parent_slot: block.block_height,
             transactions: vec![],
         };
+        let self_clone = self.clone();
+        rt::spawn(async move {
+            self_clone.storage.set_block(id, &next_block).unwrap();
+        });
 
-        self.storage.set_block(id, &next_block)?;
-
-        Ok(next_block)
+        Ok(block)
     }
 
     fn current_block(&self, id: Uuid) -> Result<Block, String> {
@@ -746,13 +751,13 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         if raw_tx.signatures.len() < 1 {
             return Err("Transaction must include signatures".to_string());
         }
-        if self
-            .storage
-            .get_transaction(id, &raw_tx.signatures[0])?
-            .is_some()
-        {
-            return Err("Transaction cannot be replayed".to_string());
-        };
+        // if self
+        //     .storage
+        //     .get_transaction(id, &raw_tx.signatures[0])?
+        //     .is_some()
+        // {
+        //     return Err("Transaction cannot be replayed".to_string());
+        // };
 
         rt::spawn(async move {
             tx_processor.queue_transaction(id, tx_clone).await;
@@ -770,25 +775,63 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     }
 
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
-        let blockchain = self.storage.get_blockchain(id)?;
-        let payer = blockchain.airdrop_keypair;
-        let latest_blockhash = self.latest_blockhash(id)?;
-        let latest_blockhash = latest_blockhash.blockhash.to_string();
-        let tx = VersionedTransaction::try_new(
-            VersionedMessage::Legacy(Message::new_with_blockhash(
-                &[system_instruction::transfer(
-                    &payer.pubkey(),
-                    pubkey,
-                    lamports,
-                )],
-                Some(&payer.pubkey()),
-                &Hash::from_str(latest_blockhash.as_str()).unwrap(),
-            )),
-            &[payer],
+        let existing_account = self.get_account(id, pubkey)?;
+        let mut account = match existing_account {
+            Some(account) => account,
+            None => Account {
+                lamports: 0,
+                data: vec![],
+                owner: system_program::id(),
+                executable: false,
+                rent_epoch: 100000000,
+            },
+        };
+        account.lamports = account.lamports + lamports;
+        self.storage.set_account(id, pubkey, account, None)?;
+        let current_block = self.get_latest_block(id)?;
+
+        let signature = Signature::new_unique();
+        let raw_tx = Transaction::new_with_payer(
+            &[system_instruction::transfer(
+                &self.get_identity(id)?,
+                pubkey,
+                lamports,
+            )],
+            Some(&self.get_identity(id)?),
+        );
+        let versioned_message = VersionedMessage::Legacy(raw_tx.message);
+
+        // Create a VersionedTransaction
+        let versioned_tx = VersionedTransaction {
+            signatures: vec![signature],
+            message: versioned_message,
+        };
+        let sanitized_tx = SanitizedTransaction::try_create(
+            versioned_tx,
+            MessageHash::Compute,
+            Some(false),
+            Loader::new(self.storage.clone(), id, self.sysvar_cache.clone()),
+            &ReservedAccountKeys::empty_key_set(),
         )
         .unwrap();
+        let tx = TransactionMetadata {
+            signature,
+            err: None,
+            logs: vec![],
+            inner_instructions: vec![],
+            compute_units_consumed: 0,
+            return_data: TransactionReturnData::default(),
+            tx: sanitized_tx,
+            current_block,
+            pre_accounts: vec![],
+            post_accounts: vec![],
+            pre_token_balances: None,
+            post_token_balances: None,
+        };
 
-        self.send_transaction(id, tx)
+        self.storage.save_transaction(id, &tx)?;
+
+        Ok(signature.to_string())
     }
 
     fn add_program(&self, program_id: Pubkey, program_bytes: &[u8]) -> (Pubkey, Account) {

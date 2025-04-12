@@ -82,13 +82,11 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let mut queue_senders = self.queue_senders.lock().unwrap();
         match queue_senders.get(&id) {
             Some(sender) => {
-                println!("Queueing transaction");
                 if let Err(e) = sender.send((id, raw_tx)).await {
                     println!("Failed to queue transaction: {}", e);
                 }
             }
             None => {
-                println!("Creating new transaction processor");
                 let (sender, mut receiver) = mpsc::channel(100);
                 queue_senders.insert(id, sender.clone());
 
@@ -98,7 +96,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
 
                 let engine = self.clone();
                 rt::spawn(async move {
-                    println!("Starting transaction processor");
                     while let Some((id, raw_tx)) = receiver.recv().await {
                         if let Err(e) = engine.process_and_save_transaction(id, raw_tx) {
                             println!("Failed to process transaction: {}", e);
@@ -151,6 +148,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             Ok(tx) => tx,
             Err(e) => return Err(e.to_string()),
         };
+
         let (current_block, valid_blockhash) =
             self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
         if !valid_blockhash {
@@ -159,13 +157,8 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
-        //TODO: I think this works, but maybe not
         let accounts_vec = self.storage.get_accounts(id, &addresses)?;
-        println!(
-            "Processing transaction with {:?} {:?} accounts",
-            addresses.clone(),
-            accounts_vec.clone()
-        );
+
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -250,6 +243,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             pre_token_balances,
             post_token_balances,
         };
+
         self.storage.save_transaction(id, &meta)?;
 
         self.storage.set_accounts_sync(
@@ -268,6 +262,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         id: Uuid,
         raw_tx: VersionedTransaction,
     ) -> Result<TransactionMetadata, String> {
+        // For v0 transactions, we need to use the native loader to load the program
         let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
 
         let tx = match SanitizedTransaction::try_create(
@@ -288,13 +283,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
-        //TODO: I think this works, but maybe not
         let accounts_vec = self.storage.get_accounts(id, &addresses)?;
-        println!(
-            "simulating transaction with {:?} {:?} accounts",
-            addresses.clone(),
-            accounts_vec.clone()
-        );
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -565,7 +554,6 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                     &mut accumulated_consume_units,
                 )
                 .map(|_| ());
-                println!("Transaction result: {:?}", tx_result);
                 if let Err(err) = self.check_accounts_rent(tx, &context, accounts_db) {
                     tx_result = Err(err);
                 };
