@@ -294,20 +294,20 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     break;
                 }
 
-                if next_block_read.block_height > current_slot {
-                    current_slot = next_block_read.block_height;
-                    if tx
-                        .send(Some((
-                            next_block_read.parent_slot,
-                            next_block_read.parent_slot,
-                            next_block_read.block_height,
-                        )))
-                        .await
-                        .is_err()
-                    {
-                        break;
-                    }
+                // if next_block_read.block_height > current_slot {
+                current_slot = next_block_read.block_height;
+                if tx
+                    .send(Some((
+                        next_block_read.parent_slot,
+                        next_block_read.parent_slot,
+                        next_block_read.block_height,
+                    )))
+                    .await
+                    .is_err()
+                {
+                    break;
                 }
+                // }
                 interval.tick().await;
             }
         });
