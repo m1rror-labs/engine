@@ -246,7 +246,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
 
         self.storage.save_transaction(id, &meta)?;
 
-        self.storage.set_accounts_sync(
+        self.storage.set_accounts(
             id,
             post_accounts
                 .into_iter()

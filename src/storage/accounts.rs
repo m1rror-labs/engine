@@ -1,10 +1,11 @@
 use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 use solana_sdk::{account::Account, pubkey::Pubkey};
 use std::str::FromStr;
 use uuid::Uuid;
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::accounts)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbAccount {

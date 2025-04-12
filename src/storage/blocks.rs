@@ -1,5 +1,6 @@
 use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 use solana_sdk::{hash::Hash, signature::Keypair};
 use uuid::Uuid;
 
@@ -30,7 +31,7 @@ impl DbBlockchain {
     }
 }
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone)]
+#[derive(Queryable, Selectable, Insertable, AsChangeset, Clone, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::blocks)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbBlock {

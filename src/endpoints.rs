@@ -241,7 +241,7 @@ pub async fn load_account(
         }
     };
 
-    match svm.storage.set_accounts_sync(id, accounts) {
+    match svm.storage.set_accounts(id, accounts) {
         Ok(_) => HttpResponse::Ok().json(json!({
             "message": "Account loaded successfully"
         })),

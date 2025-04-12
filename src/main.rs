@@ -20,12 +20,13 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let storage = storage::PgStorage::new(&database_url);
+    let cache_url = env::var("CACHE_URL").expect("CACHE_URL must be set");
+    let storage = storage::PgStorage::new(&database_url, &cache_url);
     let svm = Arc::new(SvmEngine::new(storage.clone()));
 
     if env::var("ENV").unwrap_or_else(|_| "prod".to_string()) == "dev" {
         rt::spawn(async move {
-            let storage = storage::PgStorage::new(&database_url);
+            let storage = storage::PgStorage::new(&database_url, &cache_url);
             let svm = Arc::new(SvmEngine::new(storage.clone()));
             HttpServer::new(move || {
                 App::new()

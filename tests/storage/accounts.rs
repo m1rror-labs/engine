@@ -6,7 +6,8 @@ use std::env;
 fn test_read_account() {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let storage = PgStorage::new(&database_url);
+    let cache_url = env::var("CACHE_URL").expect("CACHE_URL must be set");
+    let storage = PgStorage::new(&database_url, &cache_url);
 
     let account = storage
         .get_account(uuid::Uuid::new_v4(), &solana_sdk::pubkey::new_rand())
@@ -19,7 +20,8 @@ fn test_read_account() {
 fn test_set_account() {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let storage = PgStorage::new(&database_url);
+    let cache_url = env::var("CACHE_URL").expect("CACHE_URL must be set");
+    let storage = PgStorage::new(&database_url, &cache_url);
 
     let account = solana_sdk::account::Account {
         lamports: 100,

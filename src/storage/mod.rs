@@ -1,11 +1,8 @@
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::time::Instant;
-
 use accounts::{DbAccount, DbConfigAccount};
 use actix_web::rt;
 use bigdecimal::{BigDecimal, ToPrimitive};
 use blocks::{DbBlock, DbBlockchain};
+use cache::Cache;
 use chrono::Utc;
 use diesel::dsl::sql;
 use diesel::pg::{Pg, PgConnection};
@@ -14,6 +11,7 @@ use diesel::sql_types::{Bool, Text};
 use diesel::upsert::excluded;
 use diesel::{debug_query, prelude::*};
 use hex::encode;
+use std::str::FromStr;
 
 use solana_sdk::instruction::Instruction;
 use solana_sdk::transaction::TransactionError;
@@ -23,12 +21,13 @@ use solana_sdk::{
 use teams::Team;
 use transactions::{
     DBTransactionTokenBalance, DbTransaction, DbTransactionAccountKey, DbTransactionInstruction,
-    DbTransactionLogMessage, DbTransactionMeta, DbTransactionSignature,
+    DbTransactionLogMessage, DbTransactionMeta, DbTransactionObject, DbTransactionSignature,
 };
 use uuid::Uuid;
 
 pub mod accounts;
 pub mod blocks;
+pub mod cache;
 pub mod teams;
 pub mod transactions;
 
@@ -56,7 +55,6 @@ pub trait Storage {
     fn set_account_lamports(&self, id: Uuid, address: &Pubkey, lamports: u64)
         -> Result<(), String>;
     fn set_accounts(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String>;
-    fn set_accounts_sync(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String>;
     fn get_token_accounts_by_owner(
         &self,
         id: Uuid,
@@ -128,16 +126,20 @@ type PgPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 #[derive(Clone)]
 pub struct PgStorage {
     pool: PgPool,
+    cache: Cache,
 }
 
 impl PgStorage {
-    pub fn new(database_url: &str) -> Self {
+    pub fn new(database_url: &str, cache_url: &str) -> Self {
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         let pool = match r2d2::Pool::builder().build(manager) {
             Ok(pool) => pool,
             Err(e) => panic!("Failed to create pool: {}", e),
         };
-        PgStorage { pool }
+        PgStorage {
+            pool,
+            cache: Cache::new(cache_url),
+        }
     }
 
     fn get_connection(
@@ -215,13 +217,7 @@ impl Storage for PgStorage {
     }
 
     fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String> {
-        let mut conn = self.get_connection()?;
-        let account = crate::schema::accounts::table
-            .filter(crate::schema::accounts::address.eq(address.to_string()))
-            .filter(crate::schema::accounts::blockchain.eq(id))
-            .first::<DbAccount>(&mut conn)
-            .optional()
-            .map_err(|e| e.to_string())?;
+        let account = self.cache.get_account(id, &address.to_string())?;
         Ok(account.map(|a| a.into_account()))
     }
 
@@ -230,23 +226,16 @@ impl Storage for PgStorage {
         id: Uuid,
         addresses: &Vec<&Pubkey>,
     ) -> Result<Vec<Option<Account>>, String> {
-        let mut conn = self.get_connection()?;
-        let accounts = crate::schema::accounts::table
-            .filter(
-                crate::schema::accounts::address.eq_any(addresses.iter().map(|a| a.to_string())),
-            )
-            .filter(crate::schema::accounts::blockchain.eq(id))
-            .load::<DbAccount>(&mut conn)
-            .map_err(|e| e.to_string())?;
-
-        Ok(addresses
+        let accounts = self.cache.get_accounts(
+            id,
+            addresses
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<String>>(),
+        )?;
+        Ok(accounts
             .iter()
-            .map(|address| {
-                accounts
-                    .iter()
-                    .find(|a| a.address == address.to_string())
-                    .map(|a| a.clone().into_account())
-            })
+            .map(|a| a.as_ref().map(|a| a.clone().into_account()))
             .collect())
     }
     fn get_largest_accounts(&self, id: Uuid, limit: usize) -> Result<Vec<(Pubkey, u64)>, String> {
@@ -274,15 +263,26 @@ impl Storage for PgStorage {
         address: &Pubkey,
         lamports: u64,
     ) -> Result<(), String> {
-        let mut conn = self.get_connection()?;
-        diesel::update(
-            crate::schema::accounts::table
-                .filter(crate::schema::accounts::address.eq(address.to_string()))
-                .filter(crate::schema::accounts::blockchain.eq(id)),
-        )
-        .set(crate::schema::accounts::lamports.eq::<BigDecimal>(lamports.into()))
-        .execute(&mut conn)
-        .map_err(|e| e.to_string())?;
+        let account = self.cache.get_account(id, &address.to_string())?;
+        if let Some(mut account) = account {
+            account.lamports = lamports.into();
+            self.cache.set_accounts(id, vec![account])?;
+        }
+
+        let self_clone = self.clone();
+        let address_clone = address.clone();
+        rt::spawn(async move {
+            let mut conn = self_clone.get_connection().unwrap();
+            diesel::update(
+                crate::schema::accounts::table
+                    .filter(crate::schema::accounts::address.eq(address_clone.to_string()))
+                    .filter(crate::schema::accounts::blockchain.eq(id)),
+            )
+            .set(crate::schema::accounts::lamports.eq::<BigDecimal>(lamports.into()))
+            .execute(&mut conn)
+            .map_err(|e| e.to_string())
+            .unwrap();
+        });
         Ok(())
     }
 
@@ -293,36 +293,52 @@ impl Storage for PgStorage {
         account: Account,
         label: Option<String>,
     ) -> Result<(), String> {
-        let mut conn = self.get_connection()?;
-        let db_account = DbAccount::from_account(address, &account, label, id);
-        diesel::insert_into(crate::schema::accounts::table)
-            .values(&db_account)
-            .on_conflict((
-                crate::schema::accounts::address,
-                crate::schema::accounts::blockchain,
-            ))
-            .do_update()
-            .set((
-                crate::schema::accounts::lamports.eq(excluded(crate::schema::accounts::lamports)),
-                crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
-                crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
-                crate::schema::accounts::executable
-                    .eq(excluded(crate::schema::accounts::executable)),
-                crate::schema::accounts::rent_epoch
-                    .eq(excluded(crate::schema::accounts::rent_epoch)),
-            ))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
+        let db_account = DbAccount::from_account(&address.clone(), &account, label.clone(), id);
+        self.cache.set_accounts(id, vec![db_account])?;
+
+        let self_clone = self.clone();
+        let address_clone = address.clone();
+        rt::spawn(async move {
+            let mut conn = self_clone.get_connection().unwrap();
+            let db_account = DbAccount::from_account(&address_clone, &account, label, id);
+            diesel::insert_into(crate::schema::accounts::table)
+                .values(&db_account)
+                .on_conflict((
+                    crate::schema::accounts::address,
+                    crate::schema::accounts::blockchain,
+                ))
+                .do_update()
+                .set((
+                    crate::schema::accounts::lamports
+                        .eq(excluded(crate::schema::accounts::lamports)),
+                    crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
+                    crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
+                    crate::schema::accounts::executable
+                        .eq(excluded(crate::schema::accounts::executable)),
+                    crate::schema::accounts::rent_epoch
+                        .eq(excluded(crate::schema::accounts::rent_epoch)),
+                ))
+                .execute(&mut conn)
+                .map_err(|e| e.to_string())
+                .unwrap();
+        });
         Ok(())
     }
 
     fn set_accounts(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String> {
-        let mut conn = self.get_connection()?;
         let db_accounts: Vec<DbAccount> = accounts
             .iter()
             .map(|(address, account)| DbAccount::from_account(address, account, None, id))
             .collect();
+        self.cache.set_accounts(id, db_accounts.clone())?;
+
+        let self_clone = self.clone();
         rt::spawn(async move {
+            let mut conn = self_clone.get_connection().unwrap();
+            let db_accounts: Vec<DbAccount> = accounts
+                .iter()
+                .map(|(address, account)| DbAccount::from_account(address, account, None, id))
+                .collect();
             conn.transaction::<_, diesel::result::Error, _>(|conn| {
                 diesel::insert_into(crate::schema::accounts::table)
                     .values(db_accounts)
@@ -345,37 +361,6 @@ impl Storage for PgStorage {
             })
             .unwrap();
         });
-        Ok(())
-    }
-
-    fn set_accounts_sync(&self, id: Uuid, accounts: Vec<(Pubkey, Account)>) -> Result<(), String> {
-        let mut conn = self.get_connection()?;
-        let db_accounts: Vec<DbAccount> = accounts
-            .iter()
-            .map(|(address, account)| DbAccount::from_account(address, account, None, id))
-            .collect();
-        conn.transaction::<_, diesel::result::Error, _>(|conn| {
-            diesel::insert_into(crate::schema::accounts::table)
-                .values(db_accounts)
-                .on_conflict((
-                    crate::schema::accounts::address,
-                    crate::schema::accounts::blockchain,
-                ))
-                .do_update()
-                .set((
-                    crate::schema::accounts::lamports
-                        .eq(excluded(crate::schema::accounts::lamports)),
-                    crate::schema::accounts::data.eq(excluded(crate::schema::accounts::data)),
-                    crate::schema::accounts::owner.eq(excluded(crate::schema::accounts::owner)),
-                    crate::schema::accounts::executable
-                        .eq(excluded(crate::schema::accounts::executable)),
-                    crate::schema::accounts::rent_epoch
-                        .eq(excluded(crate::schema::accounts::rent_epoch)),
-                ))
-                .execute(conn)
-        })
-        .map_err(|e| e.to_string())?;
-
         Ok(())
     }
 
@@ -497,22 +482,35 @@ impl Storage for PgStorage {
     }
 
     fn set_block(&self, id: Uuid, block: &Block) -> Result<(), String> {
-        let mut conn = self.get_connection()?;
-        diesel::insert_into(crate::schema::blocks::table)
-            .values(DbBlock::from_block(block, id))
-            .execute(&mut conn)
-            .map_err(|e| e.to_string())?;
+        let self_clone = self.clone();
+        let db_block = DbBlock::from_block(block, id);
+        self.cache.set_block(id, db_block.clone())?;
+
+        rt::spawn(async move {
+            let mut conn = self_clone.get_connection().unwrap();
+            diesel::insert_into(crate::schema::blocks::table)
+                .values(db_block)
+                .execute(&mut conn)
+                .map_err(|e| e.to_string())
+                .unwrap();
+        });
         Ok(())
     }
 
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String> {
-        let mut conn = self.get_connection()?;
-        let block: DbBlock = crate::schema::blocks::table
-            .filter(crate::schema::blocks::blockhash.eq(blockhash.to_bytes().to_vec()))
-            .filter(crate::schema::blocks::blockchain.eq(id))
-            .first(&mut conn)
-            .map_err(|e| e.to_string())?;
-        Ok(block.into_block().0)
+        let block = self.cache.get_block(id, &blockhash.to_bytes())?;
+        match block {
+            Some(block) => Ok(block.into_block().0),
+            None => {
+                let mut conn = self.get_connection()?;
+                let block: DbBlock = crate::schema::blocks::table
+                    .filter(crate::schema::blocks::blockhash.eq(blockhash.to_bytes()))
+                    .filter(crate::schema::blocks::blockchain.eq(id))
+                    .first(&mut conn)
+                    .map_err(|e| e.to_string())?;
+                Ok(block.into_block().0)
+            }
+        }
     }
 
     //TODO: Need to do a join on transactions to get the transactions for the block
@@ -552,18 +550,12 @@ impl Storage for PgStorage {
 
     fn save_transaction(&self, id: Uuid, tx: &TransactionMetadata) -> Result<(), String> {
         let mut conn = self.get_connection()?;
-        let start = Instant::now();
-
-        println!(
-            "Transaction inserted in {:?} ms",
-            start.elapsed().as_millis()
-        );
         let db_tx = DbTransaction::from_transaction(id, &tx);
+        let db_meta = DbTransactionMeta::from_transaction(tx);
         let db_accounts = DbTransactionAccountKey::from_transaction(tx);
         let db_ix = DbTransactionInstruction::from_transaction(tx);
         let db_log = DbTransactionLogMessage::from_transaction(tx);
         let db_signature = DbTransactionSignature::from_transaction(tx);
-        let db_meta = DbTransactionMeta::from_transaction(tx);
         let mut token_balances: Vec<DBTransactionTokenBalance> = Vec::new();
         if let Some(pre_balances) = &tx.pre_token_balances {
             for pre_balance in pre_balances {
@@ -583,6 +575,16 @@ impl Storage for PgStorage {
                 ));
             }
         }
+        let tx_object = DbTransactionObject {
+            transaction: db_tx.clone(),
+            meta: db_meta.clone(),
+            account_keys: db_accounts.clone(),
+            instructions: db_ix.clone(),
+            log_messages: db_log.clone(),
+            signatures: db_signature.clone(),
+            token_balances: token_balances.clone(),
+        };
+        self.cache.set_transaction(id, tx_object)?;
 
         rt::spawn(async move {
             diesel::insert_into(crate::schema::transactions::table)
@@ -635,167 +637,50 @@ impl Storage for PgStorage {
         )>,
         String,
     > {
-        let mut conn = self.get_connection()?;
+        let tx = self.cache.get_transaction(id, &signature.to_string())?;
+        match tx {
+            Some(tx) => {
+                // let db
+                // let (db_tx, account_keys, instructions, logs, metas, signatures, token_balances) =
+                //     transaction_map.into_iter().next().unwrap().1;
 
-        let res: Vec<(
-            DbTransaction,
-            Option<DbTransactionAccountKey>,
-            Option<DbTransactionInstruction>,
-            Option<DbTransactionLogMessage>,
-            Option<DbTransactionMeta>,
-            Option<DbTransactionSignature>,
-            Option<DBTransactionTokenBalance>,
-        )> = crate::schema::transactions::table
-            .left_join(
-                crate::schema::transaction_account_keys::table
-                    .on(crate::schema::transactions::signature
-                        .eq(crate::schema::transaction_account_keys::transaction_signature)),
-            )
-            .left_join(
-                crate::schema::transaction_instructions::table
-                    .on(crate::schema::transactions::signature
-                        .eq(crate::schema::transaction_instructions::transaction_signature)),
-            )
-            .left_join(
-                crate::schema::transaction_log_messages::table
-                    .on(crate::schema::transactions::signature
-                        .eq(crate::schema::transaction_log_messages::transaction_signature)),
-            )
-            .left_join(
-                crate::schema::transaction_meta::table.on(crate::schema::transactions::signature
-                    .eq(crate::schema::transaction_meta::transaction_signature)),
-            )
-            .left_join(
-                crate::schema::transaction_signatures::table
-                    .on(crate::schema::transactions::signature
-                        .eq(crate::schema::transaction_signatures::transaction_signature)),
-            )
-            .left_join(
-                crate::schema::transaction_token_balances::table
-                    .on(crate::schema::transactions::signature
-                        .eq(crate::schema::transaction_token_balances::transaction_signature)),
-            )
-            .filter(crate::schema::transactions::signature.eq(signature.to_string()))
-            .filter(crate::schema::transactions::blockchain.eq(id))
-            .load::<(
-                DbTransaction,
-                Option<DbTransactionAccountKey>,
-                Option<DbTransactionInstruction>,
-                Option<DbTransactionLogMessage>,
-                Option<DbTransactionMeta>,
-                Option<DbTransactionSignature>,
-                Option<DBTransactionTokenBalance>,
-            )>(&mut conn)
-            .map_err(|e| e.to_string())?;
-
-        let mut transaction_map: HashMap<
-            Uuid,
-            (
-                DbTransaction,
-                Vec<DbTransactionAccountKey>,
-                Vec<DbTransactionInstruction>,
-                Vec<DbTransactionLogMessage>,
-                Vec<DbTransactionMeta>,
-                Vec<DbTransactionSignature>,
-                Vec<DBTransactionTokenBalance>,
-            ),
-        > = HashMap::new();
-
-        for (tx, account_key, instruction, log_message, meta, signature, token_balances) in res {
-            let entry = transaction_map.entry(tx.id.clone()).or_insert((
-                tx,
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ));
-            if let Some(account_key) = account_key {
-                if entry
-                    .1
+                let instructions = tx
+                    .instructions
                     .iter()
-                    .find(|k| k.account == account_key.account)
-                    .is_none()
-                {
-                    entry.1.push(account_key);
-                }
-            };
-            if let Some(instruction) = instruction {
-                if entry.2.iter().find(|i| i.id == instruction.id).is_none() {
-                    entry.2.push(instruction);
-                }
-            };
-            if let Some(log_message) = log_message {
-                if entry.3.iter().find(|l| l.id == log_message.id).is_none() {
-                    entry.3.push(log_message);
-                }
-            };
-            if let Some(meta) = meta {
-                entry.4.push(meta);
-            };
-            if let Some(signature) = signature {
-                if entry.5.iter().find(|s| s.id == signature.id).is_none() {
-                    entry.5.push(signature);
-                }
-            };
-            if let Some(token_balance) = token_balances {
-                if entry.6.iter().find(|t| t.id == token_balance.id).is_none() {
-                    entry.6.push(token_balance);
-                }
-            };
-        }
+                    .map(|i| i.to_instruction(tx.account_keys.clone()))
+                    .collect::<Vec<Instruction>>();
 
-        if transaction_map.is_empty() {
-            return Ok(None);
-        }
+                let transaction = Transaction {
+                    signatures: tx
+                        .signatures
+                        .into_iter()
+                        .map(|s| Signature::from_str(&s.signature).unwrap())
+                        .collect(),
+                    message: solana_sdk::message::Message::new(&instructions, None),
+                };
 
-        if transaction_map.len() > 1 {
-            return Err("Multiple transactions found with the same signature".to_string());
-        }
+                let metadata = tx.meta.to_metadata(tx.log_messages, tx.token_balances);
 
-        let (db_tx, account_keys, instructions, logs, metas, signatures, token_balances) =
-            transaction_map.into_iter().next().unwrap().1;
-
-        let instructions = instructions
-            .iter()
-            .map(|i| i.to_instruction(account_keys.clone()))
-            .collect::<Vec<Instruction>>();
-
-        let tx_meta = metas.first();
-        let tx_meta = match tx_meta {
-            Some(meta) => meta,
-            None => {
-                return Ok(None);
+                Ok(Some((
+                    transaction,
+                    tx.transaction.slot.to_u64().unwrap(),
+                    metadata,
+                    match tx.meta.to_owned().err {
+                        Some(e) => {
+                            let deserialized_error: Result<TransactionError, _> =
+                                serde_json::from_str(&e);
+                            match deserialized_error {
+                                Ok(e) => Some(e),
+                                Err(_) => Some(TransactionError::InvalidAccountIndex),
+                            }
+                        }
+                        None => None,
+                    },
+                    tx.transaction.created_at,
+                )))
             }
-        };
-
-        let tx = Transaction {
-            signatures: signatures
-                .into_iter()
-                .map(|s| Signature::from_str(&s.signature).unwrap())
-                .collect(),
-            message: solana_sdk::message::Message::new(&instructions, None),
-        };
-
-        let metadata = tx_meta.to_metadata(logs, token_balances);
-
-        Ok(Some((
-            tx,
-            db_tx.slot.to_u64().unwrap(),
-            metadata,
-            match tx_meta.to_owned().err {
-                Some(e) => {
-                    let deserialized_error: Result<TransactionError, _> = serde_json::from_str(&e);
-                    match deserialized_error {
-                        Ok(e) => Some(e),
-                        Err(_) => Some(TransactionError::InvalidAccountIndex),
-                    }
-                }
-                None => None,
-            },
-            db_tx.created_at,
-        )))
+            None => Ok(None),
+        }
     }
 
     fn get_transactions_for_address(

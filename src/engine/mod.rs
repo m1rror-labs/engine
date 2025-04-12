@@ -494,7 +494,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             accounts_to_upload.push((pubkey.clone(), account.clone()));
         });
 
-        self.storage.set_accounts_sync(id, accounts_to_upload)?;
+        self.storage.set_accounts(id, accounts_to_upload)?;
 
         Ok(id)
     }

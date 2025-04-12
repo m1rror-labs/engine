@@ -4,6 +4,7 @@ use crate::engine::transactions::TransactionTokenBalance;
 use bigdecimal::BigDecimal;
 use bigdecimal::ToPrimitive;
 use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 use solana_account_decoder::parse_token::UiTokenAmount;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::{
@@ -13,7 +14,29 @@ use solana_sdk::{
 use std::str::FromStr;
 use uuid::Uuid;
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+
+pub struct DbTransactionObject {
+    pub transaction: DbTransaction,
+    pub meta: DbTransactionMeta,
+    pub account_keys: Vec<DbTransactionAccountKey>,
+    pub instructions: Vec<DbTransactionInstruction>,
+    pub log_messages: Vec<DbTransactionLogMessage>,
+    pub signatures: Vec<DbTransactionSignature>,
+    pub token_balances: Vec<DBTransactionTokenBalance>,
+}
+
+#[derive(
+    Queryable,
+    QueryableByName,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+)]
 #[diesel(table_name = crate::schema::transactions)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransaction {
@@ -67,6 +90,8 @@ pub fn string_to_version(version: &str) -> TransactionVersion {
     Eq,
     PartialEq,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 #[diesel(table_name = crate::schema::transaction_account_keys)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -111,6 +136,8 @@ impl DbTransactionAccountKey {
     Eq,
     PartialEq,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 #[diesel(table_name = crate::schema::transaction_instructions)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -175,7 +202,17 @@ impl DbTransactionInstruction {
     }
 }
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
+#[derive(
+    Queryable,
+    QueryableByName,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+)]
 #[diesel(table_name = crate::schema::transaction_log_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionLogMessage {
@@ -202,7 +239,17 @@ impl DbTransactionLogMessage {
     }
 }
 
-#[derive(Queryable, QueryableByName, Selectable, Insertable, AsChangeset, Clone, Debug)]
+#[derive(
+    Queryable,
+    QueryableByName,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+)]
 #[diesel(table_name = crate::schema::transaction_meta)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DbTransactionMeta {
@@ -327,6 +374,8 @@ impl DbTransactionMeta {
     Eq,
     PartialEq,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 #[diesel(table_name = crate::schema::transaction_signatures)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -363,6 +412,8 @@ impl DbTransactionSignature {
     Eq,
     PartialEq,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 #[diesel(table_name = crate::schema::transaction_token_balances)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
