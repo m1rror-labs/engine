@@ -227,10 +227,12 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         loop {
             let tx = self.get_transaction(id, signature)?;
             if tx == None {
+                println!("Transaction not found 1");
                 continue;
             }
             if let Some((_, _, status)) = tx {
                 if status.confirmation_status == None {
+                    println!("Transaction not found 2");
                     continue;
                 }
                 let confirmation_status = status.confirmation_status.unwrap();
@@ -252,20 +254,20 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         req_id: u32,
     ) -> Result<mpsc::Receiver<Option<(u64, u64, u64)>>, String> {
         let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
-        let mut interval = time::interval(Duration::from_millis(50));
-        let latest_block = match self.latest_blockhash(id) {
-            Ok(slot) => slot,
-            Err(e) => return Err(e),
-        };
-        let initial_slot = latest_block.block_height;
-        let mut current_slot = latest_block.block_height;
-        self.subscribed_slots.try_write().unwrap().push(req_id);
-        let sub_slots = self.subscribed_slots.clone();
-        let self_clone = self.clone();
-        println!(
-            "Current date/time is slot subscribe: {}",
-            Utc::now().to_rfc3339()
-        );
+                                           // let mut interval = time::interval(Duration::from_millis(50));
+                                           // let latest_block = match self.latest_blockhash(id) {
+                                           //     Ok(slot) => slot,
+                                           //     Err(e) => return Err(e),
+                                           // };
+                                           // let initial_slot = latest_block.block_height;
+                                           // let mut current_slot = latest_block.block_height;
+                                           // self.subscribed_slots.try_write().unwrap().push(req_id);
+                                           // let sub_slots = self.subscribed_slots.clone();
+                                           // let self_clone = self.clone();
+                                           // println!(
+                                           //     "Current date/time is slot subscribe: {}",
+                                           //     Utc::now().to_rfc3339()
+                                           // );
         rt::spawn(async move {
             loop {
                 // if !sub_slots.try_read().unwrap().contains(&req_id) {
@@ -276,42 +278,42 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                 };
                 break;
                 // }
-                let next_block_read = match self_clone.latest_blockhash(id) {
-                    Ok(slot) => slot,
-                    Err(_) => {
-                        println!("Here 2");
-                        match tx.send(None).await {
-                            Ok(_) => {}
-                            Err(_) => {}
-                        };
-                        break;
-                    }
-                };
-                println!("Latest block: {:?}", next_block_read.block_height);
-                if next_block_read.block_height > initial_slot + 1 {
-                    println!("Here 3");
-                    match tx.send(None).await {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    };
-                    break;
-                }
+                // let next_block_read = match self_clone.latest_blockhash(id) {
+                //     Ok(slot) => slot,
+                //     Err(_) => {
+                //         println!("Here 2");
+                //         match tx.send(None).await {
+                //             Ok(_) => {}
+                //             Err(_) => {}
+                //         };
+                //         break;
+                //     }
+                // };
+                //     println!("Latest block: {:?}", next_block_read.block_height);
+                //     if next_block_read.block_height > initial_slot + 1 {
+                //         println!("Here 3");
+                //         match tx.send(None).await {
+                //             Ok(_) => {}
+                //             Err(_) => {}
+                //         };
+                //         break;
+                //     }
 
-                // if next_block_read.block_height > current_slot {
-                current_slot = next_block_read.block_height;
-                if tx
-                    .send(Some((
-                        next_block_read.parent_slot,
-                        next_block_read.parent_slot,
-                        next_block_read.block_height,
-                    )))
-                    .await
-                    .is_err()
-                {
-                    break;
-                }
-                // }
-                interval.tick().await;
+                //     // if next_block_read.block_height > current_slot {
+                //     current_slot = next_block_read.block_height;
+                //     if tx
+                //         .send(Some((
+                //             next_block_read.parent_slot,
+                //             next_block_read.parent_slot,
+                //             next_block_read.block_height,
+                //         )))
+                //         .await
+                //         .is_err()
+                //     {
+                //         break;
+                //     }
+                //     // }
+                //     interval.tick().await;
             }
         });
 
