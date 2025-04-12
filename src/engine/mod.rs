@@ -843,7 +843,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         };
 
         self.storage.save_transaction(id, &tx)?;
-
+        println!("Current date/time is airdrop: {}", Utc::now().to_rfc3339());
         Ok(signature.to_string())
     }
 
