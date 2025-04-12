@@ -262,9 +262,12 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         self.subscribed_slots.try_write().unwrap().push(req_id);
         let sub_slots = self.subscribed_slots.clone();
         let self_clone = self.clone();
+        println!(
+            "Current date/time is slot subscribe: {}",
+            Utc::now().to_rfc3339()
+        );
         rt::spawn(async move {
             loop {
-                interval.tick().await;
                 if !sub_slots.try_read().unwrap().contains(&req_id) {
                     match tx.send(None).await {
                         Ok(_) => {}
@@ -282,6 +285,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                         break;
                     }
                 };
+                println!("Latest block: {:?}", next_block_read.block_height);
                 if next_block_read.block_height > initial_slot + 1 {
                     match tx.send(None).await {
                         Ok(_) => {}
@@ -294,9 +298,9 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                     current_slot = next_block_read.block_height;
                     if tx
                         .send(Some((
-                            next_block_read.parent_slot - 2,
-                            next_block_read.parent_slot - 2,
-                            next_block_read.block_height - 2,
+                            next_block_read.parent_slot,
+                            next_block_read.parent_slot,
+                            next_block_read.block_height,
                         )))
                         .await
                         .is_err()
@@ -304,6 +308,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
                         break;
                     }
                 }
+                interval.tick().await;
             }
         });
 
