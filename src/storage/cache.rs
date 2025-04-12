@@ -1,5 +1,6 @@
 use super::{accounts::DbAccount, blocks::DbBlock, transactions::DbTransactionObject};
 use base64::prelude::*;
+use bigdecimal::ToPrimitive;
 use redis::{Client, Commands};
 use uuid::Uuid;
 
@@ -148,16 +149,39 @@ impl Cache {
             .client
             .get_connection()
             .map_err(|e| format!("Failed to get connection: {}", e))?;
-        let key = format!(
+
+        // Define the sorted set key
+        let sorted_set_key = format!("blockchain:{}:block", blockchain.to_string());
+
+        // Define the individual block key
+        let block_key = format!(
             "blockchain:{}:block:{}",
             blockchain.to_string(),
             BASE64_STANDARD.encode(&block.blockhash)
         );
-        let serialized_block =
-            serde_json::to_string(&block).map_err(|e| format!("Failed to deserialize: {}", e))?;
-        let _: () = con
-            .set(key, serialized_block)
-            .map_err(|e| format!("Failed to scan keys: {}", e))?;
+
+        // Serialize the block to JSON
+        let serialized_block = serde_json::to_string(&block)
+            .map_err(|e| format!("Failed to serialize block: {}", e))?;
+
+        // Use the block's height or timestamp as the score
+        let score = block.block_height.to_u64().unwrap() as f64; // Or use block.timestamp as f64
+
+        // Add the block to the sorted set
+        let _: () = redis::cmd("ZADD")
+            .arg(&sorted_set_key)
+            .arg(score)
+            .arg(serialized_block.clone())
+            .query(&mut con)
+            .map_err(|e| format!("Failed to add block to sorted set: {}", e))?;
+
+        // Store the block individually
+        let _: () = redis::cmd("SET")
+            .arg(&block_key)
+            .arg(serialized_block)
+            .query(&mut con)
+            .map_err(|e| format!("Failed to store individual block: {}", e))?;
+
         Ok(())
     }
 
@@ -182,6 +206,33 @@ impl Cache {
             None => None,
         };
         Ok(block)
+    }
+
+    pub fn get_latest_block(&self, blockchain: Uuid) -> Result<DbBlock, String> {
+        let mut con = self
+            .client
+            .get_connection()
+            .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+        // Define the Redis key for the sorted set
+        let key = format!("blockchain:{}:block", blockchain);
+
+        // Fetch the most recent block (highest score) using ZREVRANGE
+        let raw_json: Vec<String> = redis::cmd("ZREVRANGE")
+            .arg(&key)
+            .arg(0) // Start index
+            .arg(0) // End index (only the most recent block)
+            .query(&mut con)
+            .map_err(|e| format!("Failed to fetch latest block: {}", e))?;
+
+        // Check if the vector contains any elements and deserialize the first one
+        if let Some(json) = raw_json.into_iter().next() {
+            let block = serde_json::from_str::<DbBlock>(&json)
+                .map_err(|e| format!("Failed to deserialize block: {}", e))?;
+            Ok(block)
+        } else {
+            Err("No blocks found".to_string())
+        }
     }
 
     pub fn set_transaction(

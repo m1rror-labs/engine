@@ -539,12 +539,7 @@ impl Storage for PgStorage {
     }
 
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String> {
-        let mut conn = self.get_connection()?;
-        let block: DbBlock = crate::schema::blocks::table
-            .filter(crate::schema::blocks::blockchain.eq(id))
-            .order(crate::schema::blocks::block_height.desc())
-            .first(&mut conn)
-            .map_err(|e| e.to_string())?;
+        let block = self.cache.get_latest_block(id)?;
         Ok(block.into_block().0)
     }
 

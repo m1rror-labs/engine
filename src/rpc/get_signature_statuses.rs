@@ -90,8 +90,12 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
                         })
                     }
                 };
+                let mut slot = status.slot;
+                if slot > 0{
+                    slot = status.slot - 1;
+                }
                 serde_json::json!({
-                    "slot": status.slot-1,
+                    "slot": slot,
                     "confirmations": null,
                     "err": status.err,
                     "status": status_value,
