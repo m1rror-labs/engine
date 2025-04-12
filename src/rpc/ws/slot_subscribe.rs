@@ -26,6 +26,7 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
         )
         .await
         .map_err(|e| e.to_string())?;
+    println!("slot subscribe");
 
     let mut receiver = match svm.slot_subscribe(id, sub_id) {
         Ok(rec) => rec,
@@ -47,8 +48,12 @@ pub async fn slot_subscribe<T: Storage + Clone + 'static>(
         };
         count = count + 1;
         println!(
-            "parent: {}, root: {}, slot: {}, count: {}",
-            parent, root, slot, count
+            "parent: {}, root: {}, slot: {}, count: {}, current time: {}",
+            parent,
+            root,
+            slot,
+            count,
+            chrono::Utc::now().to_rfc3339()
         );
 
         session
