@@ -787,8 +787,9 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     }
 
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
-        println!("Current date/time is airdrop: {}", Utc::now().to_rfc3339());
+        let start = std::time::Instant::now();
         let existing_account = self.get_account(id, pubkey)?;
+        println!("Time to get existing account: {:?}", start.elapsed());
         let mut account = match existing_account {
             Some(account) => account,
             None => Account {
@@ -801,16 +802,19 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         };
         account.lamports = account.lamports + lamports;
         self.storage.set_account(id, pubkey, account, None)?;
-        let current_block = self.get_latest_block(id)?;
+        println!("Time to set account: {:?}", start.elapsed());
 
+        let current_block = self.get_latest_block(id)?;
+        println!("Time to get latest block: {:?}", start.elapsed());
+        let signer_pubkey = Pubkey::new_unique();
         let signature = Signature::new_unique();
         let raw_tx = Transaction::new_with_payer(
             &[system_instruction::transfer(
-                &self.get_identity(id)?,
+                &signer_pubkey,
                 pubkey,
                 lamports,
             )],
-            Some(&self.get_identity(id)?),
+            Some(&signer_pubkey),
         );
         let versioned_message = VersionedMessage::Legacy(raw_tx.message);
 
@@ -843,7 +847,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         };
 
         self.storage.save_transaction(id, &tx)?;
-        println!("Current date/time is airdrop: {}", Utc::now().to_rfc3339());
+        println!("Time to save transaction: {:?}", start.elapsed());
         Ok(signature.to_string())
     }
 
