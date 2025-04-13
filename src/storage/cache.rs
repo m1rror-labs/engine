@@ -3,7 +3,7 @@ use base64::prelude::*;
 use bigdecimal::ToPrimitive;
 use r2d2::Pool;
 use r2d2_redis::RedisConnectionManager;
-use redis::{Client, Commands, Connection};
+use redis::Commands;
 use uuid::Uuid;
 
 #[derive(Clone)]

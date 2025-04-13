@@ -227,20 +227,14 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         loop {
             let tx = self.get_transaction(id, signature)?;
             if tx == None {
-                println!("Transaction not found 1");
                 continue;
             }
             if let Some((_, _, status)) = tx {
                 if status.confirmation_status == None {
-                    println!("Transaction not found 2");
                     continue;
                 }
                 let confirmation_status = status.confirmation_status.unwrap();
                 if status_is_greater(&commitment, &confirmation_status) {
-                    println!(
-                        "Current time signature passed {:?}",
-                        Utc::now().to_rfc3339()
-                    );
                     return Ok(status.slot);
                 }
             }
@@ -250,8 +244,8 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
 
     fn slot_subscribe(
         &self,
-        id: Uuid,
-        req_id: u32,
+        _id: Uuid,
+        _req_id: u32,
     ) -> Result<mpsc::Receiver<Option<(u64, u64, u64)>>, String> {
         let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
                                            // let mut interval = time::interval(Duration::from_millis(50));
@@ -271,7 +265,6 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         rt::spawn(async move {
             loop {
                 // if !sub_slots.try_read().unwrap().contains(&req_id) {
-                println!("Here 1");
                 match tx.send(None).await {
                     Ok(_) => {}
                     Err(_) => {}
@@ -787,9 +780,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     }
 
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
-        let start = std::time::Instant::now();
         let existing_account = self.get_account(id, pubkey)?;
-        println!("Time to get existing account: {:?}", start.elapsed());
         let mut account = match existing_account {
             Some(account) => account,
             None => Account {
@@ -802,10 +793,8 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         };
         account.lamports = account.lamports + lamports;
         self.storage.set_account(id, pubkey, account, None)?;
-        println!("Time to set account: {:?}", start.elapsed());
 
         let current_block = self.get_latest_block(id)?;
-        println!("Time to get latest block: {:?}", start.elapsed());
         let signer_pubkey = Pubkey::new_unique();
         let signature = Signature::new_unique();
         let raw_tx = Transaction::new_with_payer(
@@ -847,7 +836,6 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         };
 
         self.storage.save_transaction(id, &tx)?;
-        println!("Time to save transaction: {:?}", start.elapsed());
         Ok(signature.to_string())
     }
 

@@ -50,7 +50,6 @@ pub async fn rpc_ws(
         while let Some(msg) = stream.next().await {
             match msg {
                 Ok(AggregatedMessage::Text(text)) => {
-                    println!("{:?}", text);
                     let res = handle_ws_request(id, &text.to_string(), session.clone(), &svm).await;
                     match res {
                         Ok(_) => {}
