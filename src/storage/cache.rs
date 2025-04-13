@@ -1,12 +1,14 @@
 use super::{accounts::DbAccount, blocks::DbBlock, transactions::DbTransactionObject};
 use base64::prelude::*;
 use bigdecimal::ToPrimitive;
-use redis::{Client, Commands};
+use r2d2::Pool;
+use r2d2_redis::RedisConnectionManager;
+use redis::{Client, Commands, Connection};
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct Cache {
-    client: Client,
+    pool: Pool<RedisConnectionManager>,
 }
 
 // pub struct BlockchainCache {
@@ -22,16 +24,23 @@ pub struct Cache {
 
 impl Cache {
     pub fn new(url: &str) -> Self {
-        Cache {
-            client: Client::open(url).expect("Failed to create Redis client"),
-        }
+        let manager = RedisConnectionManager::new(url).unwrap();
+        let pool = Pool::builder()
+            .max_size(15) // Set the maximum number of connections
+            .build(manager)
+            .unwrap();
+        Self { pool }
+    }
+
+    pub fn get_connection(&self) -> Result<r2d2::PooledConnection<RedisConnectionManager>, String> {
+        self.pool
+            .get()
+            .map_err(|e| format!("Failed to get connection: {}", e))
     }
 
     pub fn delete_blockchain(&self, blockchain: Uuid) -> Result<(), String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
         let pattern = format!("blockchain:{}:*", blockchain);
 
         // Use SCAN to find all matching keys
@@ -43,14 +52,14 @@ impl Cache {
                 .arg(&pattern)
                 .arg("COUNT")
                 .arg(100) // Fetch 100 keys at a time
-                .query(&mut con)
+                .query(con)
                 .map_err(|e| format!("Failed to scan keys: {}", e))?;
 
             // Delete the matching keys
             if !keys.is_empty() {
                 let _: () = redis::cmd("DEL")
                     .arg(keys)
-                    .query(&mut con)
+                    .query(con)
                     .map_err(|e| format!("Failed to scan keys: {}", e))?;
             }
 
@@ -64,10 +73,8 @@ impl Cache {
     }
 
     pub fn set_accounts(&self, blockchain: Uuid, accounts: Vec<DbAccount>) -> Result<(), String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
 
         // Prepare key-value pairs for MSET
         let mut key_value_pairs = Vec::new();
@@ -91,7 +98,7 @@ impl Cache {
         // Use MSET to set all accounts in one request
         let _: () = redis::cmd("MSET")
             .arg(flattened)
-            .query(&mut con)
+            .query(con)
             .map_err(|e| format!("Failed to execute MSET: {}", e))?;
 
         Ok(())
@@ -102,10 +109,8 @@ impl Cache {
         blockchain: Uuid,
         address: &str,
     ) -> Result<Option<DbAccount>, String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
         let key = format!("blockchain:{}:account:{}", blockchain.to_string(), address);
         let raw_json: Option<String> = con
             .get(key)
@@ -125,10 +130,8 @@ impl Cache {
         blockchain: Uuid,
         addresses: Vec<String>,
     ) -> Result<Vec<Option<DbAccount>>, String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
 
         // Prepare the keys for MGET
         let keys: Vec<String> = addresses
@@ -139,7 +142,7 @@ impl Cache {
         // Execute MGET to fetch all keys in a single request
         let raw_jsons: Vec<Option<String>> = redis::cmd("MGET")
             .arg(keys)
-            .query(&mut con)
+            .query(con)
             .map_err(|e| format!("Failed to execute MGET: {}", e))?;
 
         // Deserialize the results into DbAccount objects
@@ -159,10 +162,8 @@ impl Cache {
     }
 
     pub fn set_block(&self, blockchain: Uuid, block: DbBlock) -> Result<(), String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
 
         // Define the sorted set key
         let sorted_set_key = format!("blockchain:{}:block", blockchain.to_string());
@@ -186,24 +187,22 @@ impl Cache {
             .arg(&sorted_set_key)
             .arg(score)
             .arg(serialized_block.clone())
-            .query(&mut con)
+            .query(con)
             .map_err(|e| format!("Failed to add block to sorted set: {}", e))?;
 
         // Store the block individually
         let _: () = redis::cmd("SET")
             .arg(&block_key)
             .arg(serialized_block)
-            .query(&mut con)
+            .query(con)
             .map_err(|e| format!("Failed to store individual block: {}", e))?;
 
         Ok(())
     }
 
     pub fn get_block(&self, blockchain: Uuid, blockhash: &[u8]) -> Result<Option<DbBlock>, String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
         let key = format!(
             "blockchain:{}:block:{}",
             blockchain.to_string(),
@@ -223,10 +222,8 @@ impl Cache {
     }
 
     pub fn get_latest_block(&self, blockchain: Uuid) -> Result<DbBlock, String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
 
         // Define the Redis key for the sorted set
         let key = format!("blockchain:{}:block", blockchain);
@@ -236,7 +233,7 @@ impl Cache {
             .arg(&key)
             .arg(0) // Start index
             .arg(0) // End index (only the most recent block)
-            .query(&mut con)
+            .query(con)
             .map_err(|e| format!("Failed to fetch latest block: {}", e))?;
 
         // Check if the vector contains any elements and deserialize the first one
@@ -254,10 +251,8 @@ impl Cache {
         blockchain: Uuid,
         transaction: DbTransactionObject,
     ) -> Result<(), String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
         let key = format!(
             "blockchain:{}:transaction:{}",
             blockchain.to_string(),
@@ -276,10 +271,8 @@ impl Cache {
         blockchain: Uuid,
         signature: &str,
     ) -> Result<Option<DbTransactionObject>, String> {
-        let mut con = self
-            .client
-            .get_connection()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
         let key = format!(
             "blockchain:{}:transaction:{}",
             blockchain.to_string(),
