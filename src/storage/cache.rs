@@ -68,6 +68,9 @@ impl Cache {
             .client
             .get_connection()
             .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+        // Prepare key-value pairs for MSET
+        let mut key_value_pairs = Vec::new();
         for account in accounts {
             let key = format!(
                 "blockchain:{}:account:{}",
@@ -75,11 +78,22 @@ impl Cache {
                 account.address,
             );
             let serialized_account = serde_json::to_string(&account)
-                .map_err(|e| format!("Failed to deserialize: {}", e))?;
-            let _: () = con
-                .set(key, serialized_account)
-                .map_err(|e| format!("Failed to save key: {}", e))?;
+                .map_err(|e| format!("Failed to serialize account: {}", e))?;
+            key_value_pairs.push((key, serialized_account));
         }
+
+        // Flatten the key-value pairs into a single vector for MSET
+        let flattened: Vec<String> = key_value_pairs
+            .into_iter()
+            .flat_map(|(key, value)| vec![key, value])
+            .collect();
+
+        // Use MSET to set all accounts in one request
+        let _: () = redis::cmd("MSET")
+            .arg(flattened)
+            .query(&mut con)
+            .map_err(|e| format!("Failed to execute MSET: {}", e))?;
+
         Ok(())
     }
 
