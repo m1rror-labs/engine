@@ -780,9 +780,13 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     }
 
     fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
+        let mut pre_balance = 0;
         let existing_account = self.get_account(id, pubkey)?;
         let mut account = match existing_account {
-            Some(account) => account,
+            Some(account) => {
+                pre_balance = account.lamports;
+                account
+            }
             None => Account {
                 lamports: 0,
                 data: vec![],
@@ -820,17 +824,53 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             &ReservedAccountKeys::empty_key_set(),
         )
         .unwrap();
+        let mut return_data = TransactionReturnData::default();
+        return_data.program_id = system_program::id();
+
         let tx = TransactionMetadata {
             signature,
             err: None,
-            logs: vec![],
+            logs: vec![
+                "Program 11111111111111111111111111111111 invoke [1]".to_string(),
+                "Program 11111111111111111111111111111111 success".to_string(),
+            ],
             inner_instructions: vec![],
             compute_units_consumed: 0,
-            return_data: TransactionReturnData::default(),
+            return_data: return_data,
             tx: sanitized_tx,
             current_block,
-            pre_accounts: vec![],
-            post_accounts: vec![],
+            pre_accounts: vec![
+                (
+                    signer_pubkey.clone(),
+                    AccountSharedData::new(100_000_000_000_000_000, 0, &system_program::id()),
+                ),
+                (
+                    pubkey.clone(),
+                    AccountSharedData::new(pre_balance, 0, &system_program::id()),
+                ),
+                (
+                    system_program::id(),
+                    AccountSharedData::new(1_000_000_000, 0, &system_program::id()),
+                ),
+            ],
+            post_accounts: vec![
+                (
+                    signer_pubkey.clone(),
+                    AccountSharedData::new(
+                        100_000_000_000_000_000 - lamports,
+                        0,
+                        &system_program::id(),
+                    ),
+                ),
+                (
+                    pubkey.clone(),
+                    AccountSharedData::new(pre_balance + lamports, 0, &system_program::id()),
+                ),
+                (
+                    system_program::id(),
+                    AccountSharedData::new(1_000_000_000, 0, &system_program::id()),
+                ),
+            ],
             pre_token_balances: None,
             post_token_balances: None,
         };
