@@ -1,4 +1,5 @@
 use actix_ws::Session;
+use chrono::Utc;
 use solana_banks_interface::TransactionConfirmationStatus;
 use uuid::Uuid;
 
@@ -63,7 +64,7 @@ pub async fn signature_subscribe<T: Storage + Clone + 'static>(
     let signature = parse_signature(sig_str).map_err(|e| e.to_string())?;
     match svm.signature_subscribe(id, &signature, confirmation).await {
         Ok(slot) => {
-            println!("Signature subscribed: {:?}", slot);
+            println!("Signature subscribed: {}", Utc::now().to_rfc3339());
             session
                 .text(
                     serde_json::json!({
