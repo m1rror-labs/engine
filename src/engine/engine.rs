@@ -149,11 +149,11 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             Err(e) => return Err(e.to_string()),
         };
 
-        let (current_block, valid_blockhash) =
+        let (current_block, _valid_blockhash) =
             self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
-        if !valid_blockhash {
-            return Err("Blockhash is not valid".to_string());
-        };
+        // if !valid_blockhash {
+        //     return Err("Blockhash is not valid".to_string());
+        // };
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
@@ -275,11 +275,11 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             Ok(tx) => tx,
             Err(e) => return Err(e.to_string()),
         };
-        let (current_block, valid_blockhash) =
+        let (current_block, _valid_blockhash) =
             self.is_blockhash_valid(id, tx.message().recent_blockhash())?;
-        if !valid_blockhash {
-            return Err("Blockhash is not valid".to_string());
-        };
+        // if !valid_blockhash {
+        //     return Err("Blockhash is not valid".to_string());
+        // };
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
