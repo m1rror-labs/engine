@@ -12,8 +12,8 @@ pub fn get_epoch_info<T: Storage + Clone + 'static>(
 ) -> Result<Value, Value> {
     match svm.get_latest_block(id) {
         Ok(block) => Ok(serde_json::json!({
-            "absoluteSlot": block.block_height-10, //hardcoded
-            "blockHeight": block.block_height-10,
+            "absoluteSlot": block.block_height, //hardcoded
+            "blockHeight": block.block_height,
             "epoch": 0,
             "slotIndex": block.block_height,
             "slotsInEpoch": 432000,
