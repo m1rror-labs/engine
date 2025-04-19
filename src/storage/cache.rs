@@ -246,6 +246,37 @@ impl Cache {
         }
     }
 
+    pub fn get_recent_blocks(
+        &self,
+        blockchain: Uuid,
+        limit: usize,
+    ) -> Result<Vec<DbBlock>, String> {
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
+
+        // Define the Redis key for the sorted set
+        let key = format!("blockchain:{}:block", blockchain);
+
+        // Fetch the most recent blocks using ZREVRANGE
+        let raw_json: Vec<String> = redis::cmd("ZREVRANGE")
+            .arg(&key)
+            .arg(0) // Start index
+            .arg(limit - 1) // End index (limit - 1)
+            .query(con)
+            .map_err(|e| format!("Failed to fetch recent blocks: {}", e))?;
+
+        // Deserialize the blocks
+        let blocks: Result<Vec<DbBlock>, String> = raw_json
+            .into_iter()
+            .map(|json| {
+                serde_json::from_str::<DbBlock>(&json)
+                    .map_err(|e| format!("Failed to deserialize block: {}", e))
+            })
+            .collect();
+
+        blocks
+    }
+
     pub fn set_transaction(
         &self,
         blockchain: Uuid,

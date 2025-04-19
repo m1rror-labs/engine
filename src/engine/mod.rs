@@ -199,7 +199,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
             fee_structure: FeeStructure::default(),
             feature_set: FeatureSet::all_enabled(),
             sysvar_cache: SysvarCache::default(),
-            storage: storage,
+            storage,
             transaction_processor: tx_processor,
             subscribed_slots: Arc::new(RwLock::new(Vec::new())),
         };

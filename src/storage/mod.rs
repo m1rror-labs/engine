@@ -81,6 +81,7 @@ pub trait Storage {
 
     fn set_block(&self, id: Uuid, block: &Block) -> Result<(), String>;
     fn get_block(&self, id: Uuid, blockhash: &Hash) -> Result<Block, String>;
+    fn get_recent_blocks(&self, id: Uuid, limit: usize) -> Result<Vec<Block>, String>;
     fn get_block_by_height(&self, id: Uuid, height: u64) -> Result<Option<Block>, String>;
     fn get_block_created_at(&self, id: Uuid, height: u64) -> Result<chrono::DateTime<Utc>, String>;
     fn get_latest_block(&self, id: Uuid) -> Result<Block, String>;
@@ -510,6 +511,14 @@ impl Storage for PgStorage {
                     .map_err(|e| e.to_string())?;
                 Ok(block.into_block().0)
             }
+        }
+    }
+
+    fn get_recent_blocks(&self, id: Uuid, limit: usize) -> Result<Vec<Block>, String> {
+        let blocks = self.cache.get_recent_blocks(id, limit);
+        match blocks {
+            Ok(blocks) => Ok(blocks.into_iter().map(|b| b.into_block().0).collect()),
+            Err(e) => Err(e),
         }
     }
 

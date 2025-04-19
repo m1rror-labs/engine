@@ -23,6 +23,7 @@ use solana_sdk::{
     pubkey::Pubkey,
     rent::Rent,
     reserved_account_keys::ReservedAccountKeys,
+    slot_hashes::SlotHashes,
     stake_history::StakeHistory,
     sysvar::{Sysvar, SysvarId},
     transaction::{MessageHash, SanitizedTransaction, TransactionError, VersionedTransaction},
@@ -263,7 +264,9 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         raw_tx: VersionedTransaction,
     ) -> Result<TransactionMetadata, String> {
         // For v0 transactions, we need to use the native loader to load the program
-        let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
+        let sysvar_cache = self.sysvar_cache.clone();
+
+        let address_loader = Loader::new(self.storage.clone(), id, sysvar_cache);
 
         let tx = match SanitizedTransaction::try_create(
             raw_tx,
@@ -358,6 +361,14 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let compute_budget = ComputeBudget::default();
         let blockhash = tx.message().recent_blockhash();
         let mut program_cache_for_tx_batch = ProgramCacheForTxBatch::default();
+        let mut sysvar_cache = self.sysvar_cache.clone();
+        let recent_blocks = self.storage.get_recent_blocks(id, 100).unwrap();
+        let slot_hashes = recent_blocks
+            .iter()
+            .map(|block| (block.block_height, block.blockhash))
+            .collect::<Vec<_>>();
+        sysvar_cache.set_sysvar_for_tests(&SlotHashes::new(&slot_hashes));
+
         BUILTINS.iter().for_each(|builtint| {
             let loaded_program =
                 ProgramCacheEntry::new_builtin(0, builtint.name.len(), builtint.entrypoint);
@@ -545,7 +556,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                             None,
                             Arc::new(self.feature_set.clone().into()),
                             0,
-                            &self.sysvar_cache,
+                            &sysvar_cache,
                         ),
                         Some(log_collector),
                         compute_budget,
