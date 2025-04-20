@@ -12,7 +12,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    engine::{SvmEngine, SVM},
+    engine::{builtins::BUILTINS, SvmEngine, SVM},
     rpc::{
         rpc::{handle_request, RpcMethod, RpcRequest},
         ws::handle_ws_request,
@@ -147,6 +147,15 @@ pub async fn load_program(
             }));
         }
     };
+
+    BUILTINS
+        .iter()
+        .find(|builtin| builtin.program_id == program_id)
+        .map(|_| {
+            return HttpResponse::BadRequest().json(json!({
+                "error": format!("Program id {} is a builtin program, and can't be overwritten", program_id)
+            }));
+        });
 
     let (pubkey, account) = svm.add_program(program_id, &program_data);
     match svm.storage.set_account(id, &pubkey, account, None) {
