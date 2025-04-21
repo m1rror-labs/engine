@@ -368,6 +368,14 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             .map(|block| (block.block_height, block.blockhash))
             .collect::<Vec<_>>();
         sysvar_cache.set_sysvar_for_tests(&SlotHashes::new(&slot_hashes));
+        let mut clock = Clock::default();
+        clock.unix_timestamp = Utc::now().timestamp();
+        clock.slot = recent_blocks
+            .iter()
+            .map(|block| block.block_height)
+            .max()
+            .unwrap_or(0);
+        sysvar_cache.set_sysvar_for_tests(&clock);
 
         BUILTINS.iter().for_each(|builtint| {
             let loaded_program =
