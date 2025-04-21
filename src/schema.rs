@@ -53,6 +53,7 @@ table! {
         team_id -> Uuid,
         label -> Nullable<Text>,
         expiry -> Nullable<Timestamp>,
+        jit -> Bool,
     }
 }
 

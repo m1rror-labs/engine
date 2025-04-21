@@ -64,7 +64,17 @@ pub fn simulate_transaction<T: Storage + Clone + 'static>(
         }));
     }
 
-    match svm.simulate_transaction(id, tx) {
+    let blockchain = match svm.storage.get_blockchain(id) {
+        Ok(blockchain) => blockchain,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
+
+    match svm.simulate_transaction(id, tx, blockchain.jit) {
         Ok(res) => {
             let return_data_str = BASE64_STANDARD.encode(&res.return_data.data);
             Ok(serde_json::json!({

@@ -47,7 +47,17 @@ pub fn get_token_supply<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.get_token_supply(id, &pubkey) {
+    let blockchain = match svm.storage.get_blockchain(id) {
+        Ok(blockchain) => blockchain,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
+
+    match svm.get_token_supply(id, &pubkey, blockchain.jit) {
         Ok(amount) => match amount {
             Some(amount) => Ok(serde_json::json!({
                 "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },

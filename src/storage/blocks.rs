@@ -16,6 +16,7 @@ pub struct DbBlockchain {
     pub team_id: Uuid,
     pub label: Option<String>,
     pub expiry: Option<chrono::NaiveDateTime>,
+    pub jit: bool,
 }
 
 impl DbBlockchain {
@@ -27,6 +28,7 @@ impl DbBlockchain {
             team_id: self.team_id,
             label: self.label,
             expiry: self.expiry,
+            jit: self.jit,
         }
     }
 }

@@ -100,8 +100,18 @@ pub fn send_transaction<T: Storage + Clone + 'static>(
         }));
     }
 
+    let blockchain = match svm.storage.get_blockchain(id) {
+        Ok(blockchain) => blockchain,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }));
+        }
+    };
+
     if !skip_preflight {
-        match svm.simulate_transaction(id, unsanitized_tx.clone()) {
+        match svm.simulate_transaction(id, unsanitized_tx.clone(), blockchain.jit) {
             Ok(_) => {}
             Err(e) => {
                 return Err(serde_json::json!({
@@ -115,7 +125,7 @@ pub fn send_transaction<T: Storage + Clone + 'static>(
         "Current date/time about to send tx: {}",
         Utc::now().to_rfc3339()
     );
-    match svm.send_transaction(id, unsanitized_tx) {
+    match svm.send_transaction(id, unsanitized_tx, blockchain.jit) {
         Ok(res) => Ok(serde_json::json!(res)),
         Err(e) => Err(serde_json::json!({
             "code": -32602,

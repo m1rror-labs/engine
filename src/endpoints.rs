@@ -359,7 +359,7 @@ pub async fn convert_account_to_config(
         }
     };
 
-    let account = match svm.storage.get_account(req.blockchain, &pubkey) {
+    let account = match svm.storage.get_account(req.blockchain, &pubkey, false) {
         Ok(account) => match account {
             Some(account) => account,
             None => {

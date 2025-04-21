@@ -11,6 +11,7 @@ use diesel::sql_types::{Bool, Text};
 use diesel::upsert::excluded;
 use diesel::{debug_query, prelude::*};
 use hex::encode;
+use rpc::Rpc;
 use std::str::FromStr;
 
 use solana_sdk::instruction::Instruction;
@@ -28,6 +29,7 @@ use uuid::Uuid;
 pub mod accounts;
 pub mod blocks;
 pub mod cache;
+pub mod rpc;
 pub mod teams;
 pub mod transactions;
 
@@ -38,11 +40,13 @@ use crate::engine::{blocks::Block, transactions::TransactionMetadata};
 pub trait Storage {
     fn get_team_from_api_key(&self, api_key: Uuid) -> Result<Team, String>;
 
-    fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String>;
+    fn get_account(&self, id: Uuid, address: &Pubkey, jit: bool)
+        -> Result<Option<Account>, String>;
     fn get_accounts(
         &self,
         id: Uuid,
         addresses: &Vec<&Pubkey>,
+        jit: bool,
     ) -> Result<Vec<Option<Account>>, String>;
     fn get_largest_accounts(&self, id: Uuid, limit: usize) -> Result<Vec<(Pubkey, u64)>, String>;
     fn set_account(
@@ -128,10 +132,11 @@ type PgPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 pub struct PgStorage {
     pool: PgPool,
     cache: Cache,
+    rpc: Rpc,
 }
 
 impl PgStorage {
-    pub fn new(database_url: &str, cache_url: &str) -> Self {
+    pub fn new(database_url: &str, cache_url: &str, rpc_url: &str) -> Self {
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         let pool = match r2d2::Pool::builder().build(manager) {
             Ok(pool) => pool,
@@ -140,6 +145,7 @@ impl PgStorage {
         PgStorage {
             pool,
             cache: Cache::new(cache_url),
+            rpc: Rpc::new(rpc_url.to_string()),
         }
     }
 
@@ -199,6 +205,7 @@ impl Storage for PgStorage {
             team_id: blockchain.team_id,
             label: blockchain.label.clone(),
             expiry: blockchain.expiry,
+            jit: blockchain.jit,
         };
         diesel::insert_into(crate::schema::blockchains::table)
             .values(&db_blockchain)
@@ -217,8 +224,21 @@ impl Storage for PgStorage {
         Ok(())
     }
 
-    fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String> {
+    fn get_account(
+        &self,
+        id: Uuid,
+        address: &Pubkey,
+        jit: bool,
+    ) -> Result<Option<Account>, String> {
         let account = self.cache.get_account(id, &address.to_string())?;
+        if account.is_none() && jit {
+            let mainnet_account = self.rpc.get_account(address)?;
+            if mainnet_account.is_some() {
+                self.set_account(id, address, mainnet_account.clone().unwrap(), None)?;
+            }
+            return Ok(mainnet_account);
+        }
+
         Ok(account.map(|a| a.into_account()))
     }
 
@@ -226,14 +246,47 @@ impl Storage for PgStorage {
         &self,
         id: Uuid,
         addresses: &Vec<&Pubkey>,
+        jit: bool,
     ) -> Result<Vec<Option<Account>>, String> {
-        let accounts = self.cache.get_accounts(
+        let mut accounts = self.cache.get_accounts(
             id,
             addresses
                 .iter()
                 .map(|a| a.to_string())
                 .collect::<Vec<String>>(),
         )?;
+        if jit {
+            let none_accounts = accounts
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| a.is_none())
+                .map(|(idx, _)| addresses[idx].to_owned())
+                .collect::<Vec<Pubkey>>();
+
+            let none_idxs = accounts
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| a.is_none())
+                .map(|(idx, _)| idx)
+                .collect::<Vec<usize>>();
+
+            let mainnet_accounts = self.rpc.get_accounts(&none_accounts)?;
+            let mut accounts_to_save = vec![];
+            for (i, account) in mainnet_accounts.iter().enumerate() {
+                let idx = none_idxs[i];
+                if let Some(account) = account {
+                    accounts_to_save.push((addresses[idx].to_owned(), account.clone()));
+                    accounts.insert(
+                        none_idxs[idx],
+                        Some(DbAccount::from_account(addresses[idx], &account, None, id)),
+                    );
+                }
+            }
+            if accounts_to_save.len() > 0 {
+                self.set_accounts(id, accounts_to_save)?;
+            }
+        }
+
         Ok(accounts
             .iter()
             .map(|a| a.as_ref().map(|a| a.clone().into_account()))

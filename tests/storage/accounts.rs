@@ -7,10 +7,11 @@ fn test_read_account() {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let cache_url = env::var("CACHE_URL").expect("CACHE_URL must be set");
-    let storage = PgStorage::new(&database_url, &cache_url);
+    let rpc_url = env::var("RPC_URL").expect("RPC_URL must be set");
+    let storage = PgStorage::new(&database_url, &cache_url, &rpc_url);
 
     let account = storage
-        .get_account(uuid::Uuid::new_v4(), &solana_sdk::pubkey::new_rand())
+        .get_account(uuid::Uuid::new_v4(), &solana_sdk::pubkey::new_rand(), false)
         .unwrap();
 
     assert_eq!(account, None);
@@ -21,7 +22,8 @@ fn test_set_account() {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let cache_url = env::var("CACHE_URL").expect("CACHE_URL must be set");
-    let storage = PgStorage::new(&database_url, &cache_url);
+    let rpc_url = env::var("RPC_URL").expect("RPC_URL must be set");
+    let storage = PgStorage::new(&database_url, &cache_url, &rpc_url);
 
     let account = solana_sdk::account::Account {
         lamports: 100,
@@ -38,7 +40,7 @@ fn test_set_account() {
         .set_account(id, &address, account.clone(), None)
         .unwrap();
 
-    let stored_account = storage.get_account(id, &address).unwrap();
+    let stored_account = storage.get_account(id, &address, false).unwrap();
 
     assert_eq!(stored_account, Some(account));
 }

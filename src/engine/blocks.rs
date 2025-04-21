@@ -19,4 +19,5 @@ pub struct Blockchain {
     pub team_id: Uuid,
     pub label: Option<String>,
     pub expiry: Option<chrono::NaiveDateTime>,
+    pub jit: bool,
 }

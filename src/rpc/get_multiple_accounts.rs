@@ -41,7 +41,17 @@ pub fn get_multiple_accounts<T: Storage + Clone + 'static>(
 
     let pubkeys = pubkeys.iter().map(|v| v).collect();
 
-    match svm.get_multiple_accounts(id, &pubkeys) {
+    let blockchain = match svm.storage.get_blockchain(id) {
+        Ok(blockchain) => blockchain,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
+
+    match svm.get_multiple_accounts(id, &pubkeys, blockchain.jit) {
         Ok(accounts) => Ok(serde_json::json!({
             "context": { "apiVersion":"2.1.13", "slot": 341197247 },
             "value": accounts
