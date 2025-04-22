@@ -11,7 +11,7 @@ use crate::{
 
 use super::rpc::{parse_pubkey, RpcRequest};
 
-pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
+pub async fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
@@ -94,7 +94,7 @@ pub fn get_token_accounts_by_owner<T: Storage + Clone + 'static>(
                         Err(e) => return e,
                     };
                     // TODO: This is not optimized, should optimize this
-                    let mint_account = match svm.get_account(id, &ata.mint) {
+                    let mint_account = match svm.storage.get_account(id, &ata.mint) {
                         Ok(mint) => match mint {
                             Some(mint) => mint,
                             None => {

@@ -27,7 +27,7 @@ pub async fn rpc_reqest(
 ) -> impl Responder {
     let id = path.into_inner();
 
-    let res = handle_request(id, req.clone(), &svm);
+    let res = handle_request(id, req.clone(), &svm).await;
     println!("{:?}", req.method);
     if req.method != RpcMethod::GetAccountInfo {
         println!("{:?}", res);

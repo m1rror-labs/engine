@@ -8,7 +8,7 @@ use crate::{
 
 use super::rpc::{parse_pubkey, RpcRequest};
 
-pub fn get_balance<T: Storage + Clone + 'static>(
+pub async fn get_balance<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
@@ -39,7 +39,7 @@ pub fn get_balance<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.get_balance(id, &pubkey) {
+    match svm.get_balance(id, &pubkey).await {
         Ok(balance) => match balance {
             Some(balance) => Ok(serde_json::json!({
                 "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },

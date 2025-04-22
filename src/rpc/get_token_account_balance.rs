@@ -8,7 +8,7 @@ use crate::{
 
 use super::rpc::{parse_pubkey, RpcRequest};
 
-pub fn get_token_account_balance<T: Storage + Clone + 'static>(
+pub async fn get_token_account_balance<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
@@ -37,7 +37,20 @@ pub fn get_token_account_balance<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.get_token_account_balance(id, &pubkey) {
+    let blockchain = match svm.storage.get_blockchain(id) {
+        Ok(blockchain) => blockchain,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get latest block",
+            }))
+        }
+    };
+
+    match svm
+        .get_token_account_balance(id, &pubkey, blockchain.jit)
+        .await
+    {
         Ok(amount) => match amount {
             Some(amount) => Ok(serde_json::json!({
                 "context": { "slot": 341197053,"apiVersion":"2.1.13" },

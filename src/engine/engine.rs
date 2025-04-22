@@ -79,7 +79,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         engine
     }
 
-    pub async fn queue_transaction(&self, id: Uuid, raw_tx: VersionedTransaction) {
+    pub async fn queue_transaction(&self, id: Uuid, raw_tx: VersionedTransaction, jit: bool) {
         let mut queue_senders = self.queue_senders.lock().unwrap();
         match queue_senders.get(&id) {
             Some(sender) => {
@@ -98,7 +98,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 let engine = self.clone();
                 rt::spawn(async move {
                     while let Some((id, raw_tx)) = receiver.recv().await {
-                        if let Err(e) = engine.process_and_save_transaction(id, raw_tx) {
+                        if let Err(e) = engine.process_and_save_transaction(id, raw_tx, jit).await {
                             println!("Failed to process transaction: {}", e);
                         }
                     }
@@ -132,10 +132,11 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         Loader::new(self.storage.clone(), id, self.sysvar_cache.clone())
     }
 
-    fn process_and_save_transaction(
+    async fn process_and_save_transaction(
         &self,
         id: Uuid,
         raw_tx: VersionedTransaction,
+        jit: bool,
     ) -> Result<(), String> {
         let address_loader = Loader::new(self.storage.clone(), id, self.sysvar_cache.clone());
 
@@ -158,7 +159,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
-        let accounts_vec = self.storage.get_accounts(id, &addresses)?;
+        let accounts_vec = self.storage.get_accounts_jit(id, &addresses, jit).await?;
 
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
@@ -258,10 +259,11 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         Ok(())
     }
 
-    pub fn simulate_transaction(
+    pub async fn simulate_transaction(
         &self,
         id: Uuid,
         raw_tx: VersionedTransaction,
+        jit: bool,
     ) -> Result<TransactionMetadata, String> {
         // For v0 transactions, we need to use the native loader to load the program
         let sysvar_cache = self.sysvar_cache.clone();
@@ -286,7 +288,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
-        let accounts_vec = self.storage.get_accounts(id, &addresses)?;
+        let accounts_vec = self.storage.get_accounts_jit(id, &addresses, jit).await?;
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -459,6 +461,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             }
             let program_account = match accounts_db.get_account(&pubkey) {
                 Some(account) => account,
+                // Don't need to worry about jit since those accounts should already have been pulled
                 None => match mut_self.storage.get_account(id, &pubkey) {
                     Ok(account) => match account {
                         Some(account) => account.into(),

@@ -15,7 +15,7 @@ use crate::{
 
 use super::rpc::{encode_account, parse_pubkey, RpcRequest};
 
-pub fn get_account_info<T: Storage + Clone + 'static>(
+pub async fn get_account_info<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
@@ -64,13 +64,26 @@ pub fn get_account_info<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.get_account(id, &pubkey) {
+    let blockchain = match svm.storage.get_blockchain(id) {
+        Ok(blockchain) => blockchain,
+        Err(_) => {
+            return Err(serde_json::json!({
+                "code": -32002,
+                "message": "Failed to get blockchain",
+            }))
+        }
+    };
+
+    match svm.get_account(id, &pubkey, blockchain.jit).await {
         Ok(account) => match account {
             Some(account) => {
                 let additional_data = match is_known_spl_token_id(&account.owner) {
                     true => match StateWithExtensions::<TokenAccount>::unpack(&account.data) {
                         Ok(token_account) => {
-                            match svm.get_mint_data(id, &token_account.base.mint) {
+                            match svm
+                                .get_mint_data(id, &token_account.base.mint, blockchain.jit)
+                                .await
+                            {
                                 Ok(mint_data) => Some(AccountAdditionalDataV2 {
                                     spl_token_additional_data: Some(SplTokenAdditionalData {
                                         decimals: mint_data.decimals,
