@@ -10,7 +10,7 @@ use crate::{
 
 use super::rpc::{parse_tx, RpcRequest};
 
-pub fn simulate_transaction<T: Storage + Clone + 'static>(
+pub async fn simulate_transaction<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
@@ -74,7 +74,7 @@ pub fn simulate_transaction<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.simulate_transaction(id, tx, blockchain.jit) {
+    match svm.simulate_transaction(id, tx, blockchain.jit).await {
         Ok(res) => {
             let return_data_str = BASE64_STANDARD.encode(&res.return_data.data);
             Ok(serde_json::json!({

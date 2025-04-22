@@ -12,7 +12,7 @@ use crate::{
 
 use super::rpc::{decode_and_deserialize, RpcRequest};
 
-pub fn send_transaction<T: Storage + Clone + 'static>(
+pub async fn send_transaction<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
@@ -111,7 +111,10 @@ pub fn send_transaction<T: Storage + Clone + 'static>(
     };
 
     if !skip_preflight {
-        match svm.simulate_transaction(id, unsanitized_tx.clone(), blockchain.jit) {
+        match svm
+            .simulate_transaction(id, unsanitized_tx.clone(), blockchain.jit)
+            .await
+        {
             Ok(_) => {}
             Err(e) => {
                 return Err(serde_json::json!({

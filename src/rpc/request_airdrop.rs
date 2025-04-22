@@ -8,7 +8,7 @@ use crate::{
 
 use super::rpc::{parse_pubkey, RpcRequest};
 
-pub fn request_airdrop<T: Storage + Clone + 'static>(
+pub async fn request_airdrop<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
@@ -52,7 +52,7 @@ pub fn request_airdrop<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.airdrop(id, &pubkey, lamports) {
+    match svm.airdrop(id, &pubkey, lamports).await {
         Ok(sig) => Ok(serde_json::json!(sig.to_string())),
         Err(e) => Err(serde_json::json!({
             "code": -32000,

@@ -10,7 +10,7 @@ use crate::{
 
 use super::rpc::{parse_pubkey, RpcRequest};
 
-pub fn get_multiple_accounts<T: Storage + Clone + 'static>(
+pub async fn get_multiple_accounts<T: Storage + Clone + 'static>(
     id: Uuid,
     req: &RpcRequest,
     svm: &SvmEngine<T>,
@@ -51,7 +51,10 @@ pub fn get_multiple_accounts<T: Storage + Clone + 'static>(
         }
     };
 
-    match svm.get_multiple_accounts(id, &pubkeys, blockchain.jit) {
+    match svm
+        .get_multiple_accounts(id, &pubkeys, blockchain.jit)
+        .await
+    {
         Ok(accounts) => Ok(serde_json::json!({
             "context": { "apiVersion":"2.1.13", "slot": 341197247 },
             "value": accounts

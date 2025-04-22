@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use solana_rpc_client::rpc_client::RpcClient;
+use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
 
 #[derive(Clone)]
@@ -14,18 +14,20 @@ impl Rpc {
         Self { client }
     }
 
-    pub fn get_account(&self, pubkey: &Pubkey) -> Result<Option<Account>, String> {
+    pub async fn get_account(&self, pubkey: &Pubkey) -> Result<Option<Account>, String> {
         let account = self
             .client
             .get_account_with_commitment(pubkey, CommitmentConfig::confirmed())
+            .await
             .map_err(|e| e.to_string())?;
         Ok(account.value)
     }
 
-    pub fn get_accounts(&self, pubkeys: &[Pubkey]) -> Result<Vec<Option<Account>>, String> {
+    pub async fn get_accounts(&self, pubkeys: &[Pubkey]) -> Result<Vec<Option<Account>>, String> {
         let accounts = self
             .client
             .get_multiple_accounts_with_commitment(pubkeys, CommitmentConfig::confirmed())
+            .await
             .map_err(|e| e.to_string())?;
         Ok(accounts.value)
     }

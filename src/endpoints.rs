@@ -27,7 +27,7 @@ pub async fn rpc_reqest(
 ) -> impl Responder {
     let id = path.into_inner();
 
-    let res = handle_request(id, req.clone(), &svm);
+    let res = handle_request(id, req.clone(), &svm).await;
     println!("{:?}", req.method);
     if req.method != RpcMethod::GetAccountInfo {
         println!("{:?}", res);
@@ -359,7 +359,7 @@ pub async fn convert_account_to_config(
         }
     };
 
-    let account = match svm.storage.get_account(req.blockchain, &pubkey, false) {
+    let account = match svm.storage.get_account(req.blockchain, &pubkey) {
         Ok(account) => match account {
             Some(account) => account,
             None => {

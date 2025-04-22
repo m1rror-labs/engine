@@ -111,7 +111,7 @@ fn collect_token_balance_from_account<T: Storage + Clone + 'static>(
     let mint = token_account.base.mint;
 
     let decimals = mint_decimals.get(&mint).cloned().or_else(|| {
-        let decimals = get_mint_decimals(storage, post_accounts, id, &mint, false)?;
+        let decimals = get_mint_decimals(storage, post_accounts, id, &mint)?;
         mint_decimals.insert(mint, decimals);
         Some(decimals)
     })?;
@@ -136,14 +136,13 @@ fn get_mint_decimals<T: Storage + Clone + 'static>(
     post_accounts: Vec<(Pubkey, AccountSharedData)>,
     id: Uuid,
     mint: &Pubkey,
-    jit: bool,
 ) -> Option<u8> {
     if mint == &spl_token::native_mint::id() {
         Some(spl_token::native_mint::DECIMALS)
     } else {
         let mint_account = match post_accounts.iter().find(|(pubkey, _)| pubkey == mint) {
             Some((_, account)) => account.clone(),
-            None => match storage.get_account(id, mint, jit).ok()? {
+            None => match storage.get_account(id, mint).ok()? {
                 Some(account) => account.to_account_shared_data(),
                 None => return None,
             },

@@ -40,14 +40,24 @@ use crate::engine::{blocks::Block, transactions::TransactionMetadata};
 pub trait Storage {
     fn get_team_from_api_key(&self, api_key: Uuid) -> Result<Team, String>;
 
-    fn get_account(&self, id: Uuid, address: &Pubkey, jit: bool)
-        -> Result<Option<Account>, String>;
+    fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String>;
+    fn get_account_jit(
+        &self,
+        id: Uuid,
+        address: &Pubkey,
+        jit: bool,
+    ) -> impl std::future::Future<Output = Result<Option<Account>, String>> + Send;
     fn get_accounts(
         &self,
         id: Uuid,
         addresses: &Vec<&Pubkey>,
-        jit: bool,
     ) -> Result<Vec<Option<Account>>, String>;
+    fn get_accounts_jit(
+        &self,
+        id: Uuid,
+        addresses: &Vec<&Pubkey>,
+        jit: bool,
+    ) -> impl std::future::Future<Output = Result<Vec<Option<Account>>, String>> + Send;
     fn get_largest_accounts(&self, id: Uuid, limit: usize) -> Result<Vec<(Pubkey, u64)>, String>;
     fn set_account(
         &self,
@@ -224,7 +234,12 @@ impl Storage for PgStorage {
         Ok(())
     }
 
-    fn get_account(
+    fn get_account(&self, id: Uuid, address: &Pubkey) -> Result<Option<Account>, String> {
+        let account = self.cache.get_account(id, &address.to_string())?;
+        Ok(account.map(|a| a.into_account()))
+    }
+
+    async fn get_account_jit(
         &self,
         id: Uuid,
         address: &Pubkey,
@@ -232,7 +247,7 @@ impl Storage for PgStorage {
     ) -> Result<Option<Account>, String> {
         let account = self.cache.get_account(id, &address.to_string())?;
         if account.is_none() && jit {
-            let mainnet_account = self.rpc.get_account(address)?;
+            let mainnet_account = self.rpc.get_account(address).await?;
             if mainnet_account.is_some() {
                 self.set_account(id, address, mainnet_account.clone().unwrap(), None)?;
             }
@@ -243,6 +258,25 @@ impl Storage for PgStorage {
     }
 
     fn get_accounts(
+        &self,
+        id: Uuid,
+        addresses: &Vec<&Pubkey>,
+    ) -> Result<Vec<Option<Account>>, String> {
+        let accounts = self.cache.get_accounts(
+            id,
+            addresses
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<String>>(),
+        )?;
+
+        Ok(accounts
+            .iter()
+            .map(|a| a.as_ref().map(|a| a.clone().into_account()))
+            .collect())
+    }
+
+    async fn get_accounts_jit(
         &self,
         id: Uuid,
         addresses: &Vec<&Pubkey>,
@@ -270,7 +304,7 @@ impl Storage for PgStorage {
                 .map(|(idx, _)| idx)
                 .collect::<Vec<usize>>();
 
-            let mainnet_accounts = self.rpc.get_accounts(&none_accounts)?;
+            let mainnet_accounts = self.rpc.get_accounts(&none_accounts).await?;
             let mut accounts_to_save = vec![];
             for (i, account) in mainnet_accounts.iter().enumerate() {
                 let idx = none_idxs[i];

@@ -11,7 +11,7 @@ fn test_read_account() {
     let storage = PgStorage::new(&database_url, &cache_url, &rpc_url);
 
     let account = storage
-        .get_account(uuid::Uuid::new_v4(), &solana_sdk::pubkey::new_rand(), false)
+        .get_account(uuid::Uuid::new_v4(), &solana_sdk::pubkey::new_rand())
         .unwrap();
 
     assert_eq!(account, None);
@@ -40,7 +40,7 @@ fn test_set_account() {
         .set_account(id, &address, account.clone(), None)
         .unwrap();
 
-    let stored_account = storage.get_account(id, &address, false).unwrap();
+    let stored_account = storage.get_account(id, &address).unwrap();
 
     assert_eq!(stored_account, Some(account));
 }

@@ -172,14 +172,14 @@ pub struct RpcResponse {
     pub error: Option<Value>,
 }
 
-pub fn handle_request<T: Storage + Clone + 'static>(
+pub async fn handle_request<T: Storage + Clone + 'static>(
     id: Uuid,
     req: RpcRequest,
     svm: &SvmEngine<T>,
 ) -> RpcResponse {
     let result = match req.method {
-        RpcMethod::GetAccountInfo => get_account_info(id, &req, svm),
-        RpcMethod::GetBalance => get_balance(id, &req, svm),
+        RpcMethod::GetAccountInfo => get_account_info(id, &req, svm).await,
+        RpcMethod::GetBalance => get_balance(id, &req, svm).await,
         RpcMethod::GetBlock => get_block(id, &req, svm),
         RpcMethod::GetBlockCommitment => get_block_commitment(id, &req, svm),
         RpcMethod::GetBlockHeight => get_block_height(id, svm),
@@ -246,7 +246,7 @@ pub fn handle_request<T: Storage + Clone + 'static>(
         RpcMethod::GetMinimumBalanceForRentExemption => {
             get_minimum_balance_for_rent_exemption(&req, svm)
         }
-        RpcMethod::GetMultipleAccounts => get_multiple_accounts(id, &req, svm),
+        RpcMethod::GetMultipleAccounts => get_multiple_accounts(id, &req, svm).await,
         RpcMethod::GetProgramAccounts => get_program_accounts(id, &req, svm),
         RpcMethod::GetRecentPerformanceSamples => Ok(serde_json::json!([{
           "numSlots": 126,
@@ -287,17 +287,17 @@ pub fn handle_request<T: Storage + Clone + 'static>(
                 "total": 1016000
               }
         })),
-        RpcMethod::GetTokenAccountBalance => get_token_account_balance(id, &req, svm),
+        RpcMethod::GetTokenAccountBalance => get_token_account_balance(id, &req, svm).await,
         RpcMethod::GetTokenAccountsByDelegate => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetTokenAccountsByOwner => get_token_accounts_by_owner(id, &req, svm),
+        RpcMethod::GetTokenAccountsByOwner => get_token_accounts_by_owner(id, &req, svm).await,
         RpcMethod::GetTokenLargestAccounts => Err(serde_json::json!({
             "code": -32601,
             "message": "Method not found",
         })),
-        RpcMethod::GetTokenSupply => get_token_supply(id, &req, svm),
+        RpcMethod::GetTokenSupply => get_token_supply(id, &req, svm).await,
         RpcMethod::GetTransaction => get_transaction(id, &req, svm),
         RpcMethod::GetTransactionCount => get_transaction_count(id, svm),
         RpcMethod::GetVersion => get_version(),
@@ -320,9 +320,9 @@ pub fn handle_request<T: Storage + Clone + 'static>(
         })),
         RpcMethod::IsBlockhashValid => is_blockhash_valid(id, &req, svm),
         RpcMethod::MinimumLedgerSlot => Ok(serde_json::json!(0)),
-        RpcMethod::RequestAirdrop => request_airdrop(id, &req, svm),
-        RpcMethod::SendTransaction => send_transaction(id, &req, svm),
-        RpcMethod::SimulateTransaction => simulate_transaction(id, &req, svm),
+        RpcMethod::RequestAirdrop => request_airdrop(id, &req, svm).await,
+        RpcMethod::SendTransaction => send_transaction(id, &req, svm).await,
+        RpcMethod::SimulateTransaction => simulate_transaction(id, &req, svm).await,
         RpcMethod::GetAsset => Err(serde_json::json!({
                 "jsonrpc": "2.0",
                 "error": {

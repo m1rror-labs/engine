@@ -87,15 +87,23 @@ pub trait SVM<T: Storage + Clone + 'static> {
     fn get_blockchains(&self, team_id: Uuid) -> Result<Vec<Blockchain>, String>;
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String>;
 
-    fn get_account(&self, id: Uuid, pubkey: &Pubkey, jit: bool) -> Result<Option<Account>, String>;
-    fn get_mint_data(&self, id: Uuid, pubkey: &Pubkey, jit: bool) -> Result<Mint, String>;
+    #[allow(async_fn_in_trait)]
+    async fn get_account(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+        jit: bool,
+    ) -> Result<Option<Account>, String>;
+    #[allow(async_fn_in_trait)]
+    async fn get_mint_data(&self, id: Uuid, pubkey: &Pubkey, jit: bool) -> Result<Mint, String>;
     fn get_transactions_for_address(
         &self,
         id: Uuid,
         pubkey: &Pubkey,
         limit: Option<usize>,
     ) -> Result<Vec<DbTransaction>, String>;
-    fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
+    #[allow(async_fn_in_trait)]
+    async fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String>;
     fn get_block(&self, id: Uuid, slot_number: &u64) -> Result<Option<Block>, String>;
     fn get_block_confirmation_status(
         &self,
@@ -106,7 +114,8 @@ pub trait SVM<T: Storage + Clone + 'static> {
     fn get_fee_for_message(&self, message: &SanitizedMessage) -> u64;
     fn get_genesis_hash(&self, id: Uuid) -> Result<Hash, String>;
     fn get_identity(&self, id: Uuid) -> Result<Pubkey, String>;
-    fn get_multiple_accounts(
+    #[allow(async_fn_in_trait)]
+    async fn get_multiple_accounts(
         &self,
         id: Uuid,
         pubkeys: &Vec<&Pubkey>,
@@ -128,13 +137,15 @@ pub trait SVM<T: Storage + Clone + 'static> {
         pubkey: &Pubkey,
     ) -> Result<Vec<(Pubkey, Account)>, String>;
     fn get_largest_accounts(&self, id: Uuid) -> Result<Vec<(Pubkey, u64)>, String>;
-    fn get_token_supply(
+    #[allow(async_fn_in_trait)]
+    async fn get_token_supply(
         &self,
         id: Uuid,
         pubkey: &Pubkey,
         jit: bool,
     ) -> Result<Option<TokenAmount>, String>;
-    fn get_token_account_balance(
+    #[allow(async_fn_in_trait)]
+    async fn get_token_account_balance(
         &self,
         id: Uuid,
         pubkey: &Pubkey,
@@ -152,13 +163,15 @@ pub trait SVM<T: Storage + Clone + 'static> {
         tx: VersionedTransaction,
         jit: bool,
     ) -> Result<String, String>;
-    fn simulate_transaction(
+    #[allow(async_fn_in_trait)]
+    async fn simulate_transaction(
         &self,
         id: Uuid,
         tx: VersionedTransaction,
         jit: bool,
     ) -> Result<TransactionMetadata, String>;
-    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String>;
+    #[allow(async_fn_in_trait)]
+    async fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String>;
     fn add_program(&self, program_id: Pubkey, program_bytes: &[u8]) -> (Pubkey, Account);
 
     #[allow(async_fn_in_trait)]
@@ -528,12 +541,17 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         self.storage.get_blockchains(team_id)
     }
 
-    fn get_account(&self, id: Uuid, pubkey: &Pubkey, jit: bool) -> Result<Option<Account>, String> {
-        self.storage.get_account(id, pubkey, jit)
+    async fn get_account(
+        &self,
+        id: Uuid,
+        pubkey: &Pubkey,
+        jit: bool,
+    ) -> Result<Option<Account>, String> {
+        self.storage.get_account_jit(id, pubkey, jit).await
     }
 
-    fn get_mint_data(&self, id: Uuid, pubkey: &Pubkey, jit: bool) -> Result<Mint, String> {
-        let account = match self.get_account(id, pubkey, jit)? {
+    async fn get_mint_data(&self, id: Uuid, pubkey: &Pubkey, jit: bool) -> Result<Mint, String> {
+        let account = match self.get_account(id, pubkey, jit).await? {
             Some(account) => account,
             None => return Err("Account not found".to_string()),
         };
@@ -554,8 +572,8 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         self.storage.get_transactions_for_address(id, pubkey, limit)
     }
 
-    fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String> {
-        match self.get_account(id, pubkey, false)? {
+    async fn get_balance(&self, id: Uuid, pubkey: &Pubkey) -> Result<Option<u64>, String> {
+        match self.get_account(id, pubkey, false).await? {
             Some(account) => Ok(Some(account.lamports)),
             None => Ok(None),
         }
@@ -611,13 +629,13 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         Ok(blockchain.airdrop_keypair.pubkey())
     }
 
-    fn get_multiple_accounts(
+    async fn get_multiple_accounts(
         &self,
         id: Uuid,
         pubkeys: &Vec<&Pubkey>,
         jit: bool,
     ) -> Result<Vec<Option<Account>>, String> {
-        self.storage.get_accounts(id, pubkeys, jit)
+        self.storage.get_accounts_jit(id, pubkeys, jit).await
     }
 
     fn latest_blockhash(&self, id: Uuid) -> Result<Block, String> {
@@ -666,20 +684,20 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         Ok((block, 120 >= duration.num_seconds()))
     }
 
-    fn get_token_account_balance(
+    async fn get_token_account_balance(
         &self,
         id: Uuid,
         pubkey: &Pubkey,
         jit: bool,
     ) -> Result<Option<TokenAmount>, String> {
-        let account = self.get_account(id, pubkey, jit)?;
+        let account = self.get_account(id, pubkey, jit).await?;
         if let None = account {
             return Ok(None);
         }
         let account = account.unwrap();
         let spl =
             SplAccount::unpack_from_slice(account.data.as_slice()).map_err(|e| e.to_string())?;
-        let mint = self.get_account(id, &spl.mint, jit)?;
+        let mint = self.get_account(id, &spl.mint, jit).await?;
         if let None = mint {
             return Ok(None);
         }
@@ -712,13 +730,13 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         self.storage.get_program_accounts(id, pubkey)
     }
 
-    fn get_token_supply(
+    async fn get_token_supply(
         &self,
         id: Uuid,
         pubkey: &Pubkey,
         jit: bool,
     ) -> Result<Option<TokenAmount>, String> {
-        let account = self.get_account(id, pubkey, jit)?;
+        let account = self.get_account(id, pubkey, jit).await?;
         if let None = account {
             return Ok(None);
         }
@@ -797,7 +815,7 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
         Ok(raw_tx.signatures[0].to_string())
     }
 
-    fn simulate_transaction(
+    async fn simulate_transaction(
         &self,
         id: Uuid,
         raw_tx: VersionedTransaction,
@@ -805,11 +823,12 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
     ) -> Result<TransactionMetadata, String> {
         self.transaction_processor
             .simulate_transaction(id, raw_tx, jit)
+            .await
     }
 
-    fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
+    async fn airdrop(&self, id: Uuid, pubkey: &Pubkey, lamports: u64) -> Result<String, String> {
         let mut pre_balance = 0;
-        let existing_account = self.get_account(id, pubkey, false)?;
+        let existing_account = self.get_account(id, pubkey, false).await?;
         let mut account = match existing_account {
             Some(account) => {
                 pre_balance = account.lamports;
@@ -1248,7 +1267,7 @@ impl<T: Storage + Clone + 'static> Loader<T> {
     ) -> std::result::Result<LoadedAddresses, AddressLookupError> {
         let table_account = self
             .storage
-            .get_account(self.id, &address_table_lookup.account_key, false)
+            .get_account(self.id, &address_table_lookup.account_key)
             .map_err(|_| AddressLookupError::LookupTableAccountNotFound)?
             .ok_or(AddressLookupError::LookupTableAccountNotFound)?;
 

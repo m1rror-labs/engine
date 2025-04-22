@@ -98,7 +98,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 let engine = self.clone();
                 rt::spawn(async move {
                     while let Some((id, raw_tx)) = receiver.recv().await {
-                        if let Err(e) = engine.process_and_save_transaction(id, raw_tx, jit) {
+                        if let Err(e) = engine.process_and_save_transaction(id, raw_tx, jit).await {
                             println!("Failed to process transaction: {}", e);
                         }
                     }
@@ -132,7 +132,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         Loader::new(self.storage.clone(), id, self.sysvar_cache.clone())
     }
 
-    fn process_and_save_transaction(
+    async fn process_and_save_transaction(
         &self,
         id: Uuid,
         raw_tx: VersionedTransaction,
@@ -159,7 +159,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
-        let accounts_vec = self.storage.get_accounts(id, &addresses, jit)?;
+        let accounts_vec = self.storage.get_accounts_jit(id, &addresses, jit).await?;
 
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
@@ -259,7 +259,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         Ok(())
     }
 
-    pub fn simulate_transaction(
+    pub async fn simulate_transaction(
         &self,
         id: Uuid,
         raw_tx: VersionedTransaction,
@@ -288,7 +288,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
         let message = tx.message();
         let account_keys = message.account_keys();
         let addresses: Vec<&Pubkey> = account_keys.iter().collect();
-        let accounts_vec = self.storage.get_accounts(id, &addresses, jit)?;
+        let accounts_vec = self.storage.get_accounts_jit(id, &addresses, jit).await?;
         let accounts_map: HashMap<&Pubkey, Option<Account>> = addresses
             .iter()
             .cloned()
@@ -454,7 +454,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
             let program_account = match accounts_db.get_account(&pubkey) {
                 Some(account) => account,
                 // Don't need to worry about jit since those accounts should already have been pulled
-                None => match mut_self.storage.get_account(id, &pubkey, false) {
+                None => match mut_self.storage.get_account(id, &pubkey) {
                     Ok(account) => match account {
                         Some(account) => account.into(),
                         None => return,
@@ -522,7 +522,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 {
                     let owner_account = match accounts_db.get_account(owner_id) {
                         Some(account) => account,
-                        None => match self.storage.get_account(id, owner_id, false) {
+                        None => match self.storage.get_account(id, owner_id) {
                             Ok(account) => match account {
                                 Some(account) => account.into(),
                                 None => return Err(TransactionError::ProgramAccountNotFound),
