@@ -110,17 +110,36 @@ pub async fn send_transaction<T: Storage + Clone + 'static>(
         }
     };
 
+    let mut jit = blockchain.jit;
     if !skip_preflight {
         match svm
-            .simulate_transaction(id, unsanitized_tx.clone(), blockchain.jit)
+            .simulate_transaction(id, unsanitized_tx.clone(), false)
             .await
         {
-            Ok(_) => {}
+            // If the tx passed without jit, run it without jit regardless of the blockchain setting
+            Ok(_) => jit = false,
             Err(e) => {
-                return Err(serde_json::json!({
-                    "code": -32602,
-                    "message": e,
-                }));
+                // If the tx failed and the blockchain is set to jit, try it with jit
+                if jit {
+                    match svm
+                        .simulate_transaction(id, unsanitized_tx.clone(), false)
+                        .await
+                    {
+                        Ok(_) => jit = true,
+                        Err(e) => {
+                            return Err(serde_json::json!({
+                                "code": -32602,
+                                "message": e,
+                            }));
+                        }
+                    }
+                } else {
+                    // If the tx failed and the blockchain is not set to jit, return the error
+                    return Err(serde_json::json!({
+                        "code": -32602,
+                        "message": e,
+                    }));
+                }
             }
         }
     }
@@ -128,7 +147,7 @@ pub async fn send_transaction<T: Storage + Clone + 'static>(
         "Current date/time about to send tx: {}",
         Utc::now().to_rfc3339()
     );
-    match svm.send_transaction(id, unsanitized_tx, blockchain.jit) {
+    match svm.send_transaction(id, unsanitized_tx, jit) {
         Ok(res) => Ok(serde_json::json!(res)),
         Err(e) => Err(serde_json::json!({
             "code": -32602,
