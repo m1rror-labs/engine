@@ -63,12 +63,11 @@ pub(crate) static BUILTINS: &[BuiltinPrototype] = &[
         name: "address_lookup_table_program",
         entrypoint: solana_address_lookup_table_program::processor::Entrypoint::vm,
     },
-    // BuiltinPrototype {
-    //     feature_id: Some(feature_set::zk_token_sdk_enabled::id()),
-    //     program_id: solana_zk_token_sdk::zk_token_proof_program::id(),
-    //     name: "zk_token_proof_program",
-    //     entrypoint: solana_zk_token_proof_program::Entrypoint::vm,
-    // },
+    BuiltinPrototype {
+        program_id: solana_zk_token_sdk::zk_token_proof_program::id(),
+        name: "zk_token_proof_program",
+        entrypoint: solana_zk_token_proof_program::Entrypoint::vm,
+    },
     // BuiltinPrototype {
     //     feature_id: Some(feature_set::enable_program_runtime_v2_and_loader_v4::id()),
     //     program_id: solana_sdk::loader_v4::id(),
