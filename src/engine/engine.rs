@@ -510,6 +510,7 @@ impl<T: Storage + Clone + 'static> TransactionProcessor<T> {
                 let program_index = c.program_id_index as usize;
                 // This may never error, because the transaction is sanitized
                 let (program_id, program_account) = accounts.get(program_index).unwrap();
+                println!("Program id: {:?}", program_id);
                 if native_loader::check_id(program_id) {
                     return Ok(account_indices);
                 }
