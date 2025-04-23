@@ -1,3 +1,4 @@
+use solana_program::pubkey;
 use solana_program_runtime::invoke_context::BuiltinFunctionWithContext;
 use solana_sdk::{bpf_loader, bpf_loader_deprecated, bpf_loader_upgradeable, pubkey::Pubkey};
 
@@ -67,6 +68,11 @@ pub(crate) static BUILTINS: &[BuiltinPrototype] = &[
         program_id: solana_zk_token_sdk::zk_token_proof_program::id(),
         name: "zk_token_proof_program",
         entrypoint: solana_zk_token_proof_program::Entrypoint::vm,
+    },
+    BuiltinPrototype {
+        program_id: pubkey!("ZkE1Gama1Proof11111111111111111111111111111"),
+        name: "zk_token_proof_program_v2",
+        entrypoint: solana_zk_elgamal_proof_program::Entrypoint::vm,
     },
     // BuiltinPrototype {
     //     feature_id: Some(feature_set::enable_program_runtime_v2_and_loader_v4::id()),

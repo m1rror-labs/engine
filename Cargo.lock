@@ -2403,6 +2403,7 @@ dependencies = [
  "solana-timings",
  "solana-transaction-status-client-types",
  "solana-vote-program",
+ "solana-zk-elgamal-proof-program",
  "solana-zk-token-proof-program",
  "solana-zk-token-sdk",
  "spl-token 7.0.0",
@@ -4520,6 +4521,21 @@ dependencies = [
  "solana-program-runtime",
  "solana-sdk",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "solana-zk-elgamal-proof-program"
+version = "2.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "361bcf155267d8482f63109637aa6384bdef1e33bbcc5a93f0c7a9d9940c26a9"
+dependencies = [
+ "bytemuck",
+ "num-derive",
+ "num-traits",
+ "solana-log-collector",
+ "solana-program-runtime",
+ "solana-sdk",
+ "solana-zk-sdk",
 ]
 
 [[package]]
