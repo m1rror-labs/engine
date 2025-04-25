@@ -44,7 +44,7 @@ impl Pubsub {
         let producer = self.producer.lock().unwrap();
         let payload = serde_json::to_string(&account).unwrap();
         if let Err(e) = producer.send(
-            BaseRecord::to("accounts")
+            BaseRecord::to("geyser")
                 .payload(payload.as_str())
                 .key("account"),
         ) {
@@ -57,7 +57,7 @@ impl Pubsub {
         for account in accounts {
             let payload = serde_json::to_string(&account).unwrap();
             if let Err(e) = producer.send(
-                BaseRecord::to("accounts")
+                BaseRecord::to("geyser")
                     .payload(payload.as_str())
                     .key("account"),
             ) {
@@ -70,7 +70,7 @@ impl Pubsub {
         let producer = self.producer.lock().unwrap();
         let payload = serde_json::to_string(&transaction).unwrap();
         if let Err(e) = producer.send(
-            BaseRecord::to("transactions")
+            BaseRecord::to("geyser")
                 .payload(payload.as_str())
                 .key("transaction"),
         ) {
@@ -82,7 +82,7 @@ impl Pubsub {
         let producer = self.producer.lock().unwrap();
         let payload = serde_json::to_string(&block).unwrap();
         if let Err(e) = producer.send(
-            BaseRecord::to("blocks")
+            BaseRecord::to("geyser")
                 .payload(payload.as_str())
                 .key("block"),
         ) {
