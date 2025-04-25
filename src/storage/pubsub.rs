@@ -28,20 +28,10 @@ impl Pubsub {
                 .create::<AdminClient<_>>()
                 .expect("Admin client creation error");
 
-            let accounts_topic =
-                NewTopic::new("accounts", 1, rdkafka::admin::TopicReplication::Fixed(1));
-            let transactions_topic = NewTopic::new(
-                "transactions",
-                1,
-                rdkafka::admin::TopicReplication::Fixed(1),
-            );
-            let blocks_topic =
-                NewTopic::new("blocks", 1, rdkafka::admin::TopicReplication::Fixed(1));
+            let geyser_topic =
+                NewTopic::new("geyser", 1, rdkafka::admin::TopicReplication::Fixed(1));
             admin_client
-                .create_topics(
-                    &[accounts_topic, transactions_topic, blocks_topic],
-                    &rdkafka::admin::AdminOptions::new(),
-                )
+                .create_topics(&[geyser_topic], &rdkafka::admin::AdminOptions::new())
                 .await
                 .expect("Failed to create topics");
         });
