@@ -25,6 +25,7 @@ impl Pubsub {
         rt::spawn(async move {
             let admin_client = ClientConfig::new()
                 .set("bootstrap.servers", url_clone)
+                .set("broker.address.family", "v4") // Force IPv4
                 .create::<AdminClient<_>>()
                 .expect("Admin client creation error");
 
