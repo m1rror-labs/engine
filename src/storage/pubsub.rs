@@ -29,7 +29,7 @@ impl Pubsub {
                 .expect("Admin client creation error");
 
             let geyser_topic =
-                NewTopic::new("geyser", 1, rdkafka::admin::TopicReplication::Fixed(1));
+                NewTopic::new("geyser", 1, rdkafka::admin::TopicReplication::Variable);
             admin_client
                 .create_topics(&[geyser_topic], &rdkafka::admin::AdminOptions::new())
                 .await
