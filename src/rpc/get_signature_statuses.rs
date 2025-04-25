@@ -1,4 +1,3 @@
-use chrono::Utc;
 use serde_json::Value;
 use solana_banks_interface::{TransactionConfirmationStatus, TransactionStatus};
 use solana_sdk::transaction::Transaction;
@@ -16,10 +15,6 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
     req: &RpcRequest,
     svm: &SvmEngine<T>,
 ) -> Result<Value, Value> {
-    println!(
-        "get_signature_statuses timestamp: {:?}",
-        Utc::now().to_rfc3339()
-    );
     let sig_raw_arr = match req
         .params
         .as_ref()
@@ -67,11 +62,6 @@ pub fn get_signature_statuses<T: Storage + Clone + 'static>(
     //         }))
     //     }
     // };
-
-    println!(
-        "get_signature_statuses timestamp: {:?}",
-        Utc::now().to_rfc3339()
-    );
     Ok(serde_json::json!({
         "context": { "slot": 100,"apiVersion":"2.1.13" },
         "value": txs

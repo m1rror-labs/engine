@@ -28,9 +28,9 @@ pub async fn rpc_reqest(
     let id = path.into_inner();
 
     let res = handle_request(id, req.clone(), &svm).await;
-    println!("{:?}", req.method);
+    // println!("{:?}", req.method);
     if req.method != RpcMethod::GetAccountInfo {
-        println!("{:?}", res);
+        // println!("{:?}", res);
     }
     HttpResponse::Ok().json(res)
 }

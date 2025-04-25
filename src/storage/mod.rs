@@ -5,12 +5,13 @@ use blocks::{DbBlock, DbBlockchain};
 use cache::Cache;
 use chrono::Utc;
 use diesel::dsl::sql;
-use diesel::pg::{Pg, PgConnection};
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::sql_types::{Bool, Text};
 use diesel::upsert::excluded;
-use diesel::{debug_query, prelude::*};
 use hex::encode;
+use pubsub::Pubsub;
 use rpc::Rpc;
 use std::str::FromStr;
 
@@ -29,6 +30,7 @@ use uuid::Uuid;
 pub mod accounts;
 pub mod blocks;
 pub mod cache;
+pub mod pubsub;
 pub mod rpc;
 pub mod teams;
 pub mod transactions;
@@ -143,19 +145,22 @@ pub struct PgStorage {
     pool: PgPool,
     cache: Cache,
     rpc: Rpc,
+    pubsub: Pubsub,
 }
 
 impl PgStorage {
-    pub fn new(database_url: &str, cache_url: &str, rpc_url: &str) -> Self {
+    pub fn new(database_url: &str, cache_url: &str, rpc_url: &str, pubsub_url: &str) -> Self {
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         let pool = match r2d2::Pool::builder().build(manager) {
             Ok(pool) => pool,
             Err(e) => panic!("Failed to create pool: {}", e),
         };
+
         PgStorage {
             pool,
             cache: Cache::new(cache_url),
             rpc: Rpc::new(rpc_url.to_string()),
+            pubsub: Pubsub::new(pubsub_url),
         }
     }
 
@@ -382,7 +387,8 @@ impl Storage for PgStorage {
         label: Option<String>,
     ) -> Result<(), String> {
         let db_account = DbAccount::from_account(&address.clone(), &account, label.clone(), id);
-        self.cache.set_accounts(id, vec![db_account])?;
+        self.cache.set_accounts(id, vec![db_account.clone()])?;
+        self.pubsub.publish_account_update(db_account.clone());
 
         let self_clone = self.clone();
         let address_clone = address.clone();
@@ -419,6 +425,7 @@ impl Storage for PgStorage {
             .map(|(address, account)| DbAccount::from_account(address, account, None, id))
             .collect();
         self.cache.set_accounts(id, db_accounts.clone())?;
+        self.pubsub.publish_accounts_update(db_accounts.clone());
 
         let self_clone = self.clone();
         rt::spawn(async move {
@@ -468,7 +475,6 @@ impl Storage for PgStorage {
                     .sql(", 'hex') IN data) > 0"),
             )
             .filter(crate::schema::accounts::blockchain.eq(id));
-        println!("{}", debug_query::<Pg, _>(&query));
 
         let accounts = query
             .load::<DbAccount>(&mut conn)
@@ -573,6 +579,7 @@ impl Storage for PgStorage {
         let self_clone = self.clone();
         let db_block = DbBlock::from_block(block, id);
         self.cache.set_block(id, db_block.clone())?;
+        self.pubsub.publish_block(db_block.clone());
 
         rt::spawn(async move {
             let mut conn = self_clone.get_connection().unwrap();
@@ -675,7 +682,8 @@ impl Storage for PgStorage {
             signatures: db_signature.clone(),
             token_balances: token_balances.clone(),
         };
-        self.cache.set_transaction(id, tx_object)?;
+        self.cache.set_transaction(id, tx_object.clone())?;
+        self.pubsub.publish_transaction(tx_object.clone());
 
         rt::spawn(async move {
             diesel::insert_into(crate::schema::transactions::table)
