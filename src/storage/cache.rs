@@ -43,31 +43,27 @@ impl Cache {
         let con = &mut *con;
         let pattern = format!("blockchain:{}:*", blockchain);
 
-        // Use SCAN to find all matching keys
-        let mut cursor: u64 = 0;
-        loop {
-            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
-                .arg(cursor)
-                .arg("MATCH")
-                .arg(&pattern)
-                .arg("COUNT")
-                .arg(100) // Fetch 100 keys at a time
-                .query(con)
-                .map_err(|e| format!("Failed to scan keys: {}", e))?;
+        // Lua script to delete all keys matching a pattern
+        let lua_script = r#"
+            local keys = redis.call('KEYS', ARGV[1])
+            if #keys > 0 then
+                redis.call('DEL', unpack(keys))
+            end
+            return #keys
+        "#;
 
-            // Delete the matching keys
-            if !keys.is_empty() {
-                let _: () = redis::cmd("DEL")
-                    .arg(keys)
-                    .query(con)
-                    .map_err(|e| format!("Failed to scan keys: {}", e))?;
-            }
+        // Execute the Lua script
+        let deleted_count: i32 = redis::cmd("EVAL")
+            .arg(lua_script)
+            .arg(0) // Number of keys passed as arguments (none in this case)
+            .arg(pattern.clone())
+            .query(con)
+            .map_err(|e| format!("Failed to delete keys: {}", e))?;
 
-            cursor = next_cursor;
-            if cursor == 0 {
-                break;
-            }
-        }
+        println!(
+            "Deleted {} keys matching pattern '{}'",
+            deleted_count, pattern
+        );
 
         Ok(())
     }
@@ -320,5 +316,50 @@ impl Cache {
             None => None,
         };
         Ok(transaction)
+    }
+
+    pub fn get_all_blockchain_values(&self, limit: usize) -> Result<Vec<Uuid>, String> {
+        let mut con = self.get_connection()?;
+        let con = &mut *con;
+        let pattern = "blockchain:*";
+        let mut cursor: u64 = 0;
+        let mut all_values = Vec::new();
+
+        loop {
+            // Use SCAN to find all matching keys
+            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(pattern)
+                .arg("COUNT")
+                .arg(100) // Fetch 100 keys at a time
+                .query(con)
+                .map_err(|e| format!("Failed to scan keys: {}", e))?;
+
+            if !keys.is_empty() {
+                // Extract blockchain UUIDs from the keys
+                let blockchain_ids: Vec<Uuid> = keys
+                    .into_iter()
+                    .filter_map(|key| {
+                        key.strip_prefix("blockchain:") // Remove the "blockchain:" prefix
+                            .and_then(|remaining| remaining.split(':').next()) // Get the part before the first colon
+                            .and_then(|uuid_str| uuid::Uuid::parse_str(uuid_str).ok())
+                        // Parse the string into a Uuid
+                    })
+                    .take(limit - all_values.len())
+                    .collect();
+                all_values.extend(blockchain_ids);
+            }
+
+            // Break the loop if the cursor is 0 (end of iteration) or limit is reached
+            if next_cursor == 0 || all_values.len() >= limit {
+                break;
+            }
+            cursor = next_cursor;
+        }
+
+        // Truncate to the exact limit if necessary
+        all_values.truncate(limit);
+        Ok(all_values)
     }
 }
