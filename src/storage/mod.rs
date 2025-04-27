@@ -230,6 +230,7 @@ impl Storage for PgStorage {
     }
 
     fn delete_blockchain(&self, id: Uuid) -> Result<(), String> {
+        self.cache.delete_blockchain(id)?;
         let mut conn = self.get_connection()?;
         diesel::delete(
             crate::schema::blockchains::table.filter(crate::schema::blockchains::id.eq(id)),
