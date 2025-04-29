@@ -96,6 +96,7 @@ pub trait SVM<T: Storage + Clone + 'static> {
     ) -> Result<Option<Account>, String>;
     #[allow(async_fn_in_trait)]
     async fn get_mint_data(&self, id: Uuid, pubkey: &Pubkey, jit: bool) -> Result<Mint, String>;
+    fn get_mint_data_sync(&self, id: Uuid, pubkey: &Pubkey) -> Result<Mint, String>;
     fn get_transactions_for_address(
         &self,
         id: Uuid,
@@ -552,6 +553,18 @@ impl<T: Storage + Clone + 'static> SVM<T> for SvmEngine<T> {
 
     async fn get_mint_data(&self, id: Uuid, pubkey: &Pubkey, jit: bool) -> Result<Mint, String> {
         let account = match self.get_account(id, pubkey, jit).await? {
+            Some(account) => account,
+            None => return Err("Account not found".to_string()),
+        };
+
+        if !is_known_spl_token_id(&account.owner) {
+            return Err("Not a valid SPL token account".to_string());
+        }
+
+        Mint::unpack_from_slice(account.data.as_slice()).map_err(|e| e.to_string())
+    }
+    fn get_mint_data_sync(&self, id: Uuid, pubkey: &Pubkey) -> Result<Mint, String> {
+        let account = match self.storage.get_account(id, pubkey)? {
             Some(account) => account,
             None => return Err("Account not found".to_string()),
         };

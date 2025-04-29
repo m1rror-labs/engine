@@ -51,7 +51,7 @@ pub async fn get_account_info<T: Storage + Clone + 'static>(
     _ = commitment;
     _ = min_context_slot;
 
-    let encoding = encoding.unwrap_or(UiAccountEncoding::Binary);
+    let encoding = encoding.unwrap_or(UiAccountEncoding::Base64);
     let pubkey = parse_pubkey(pubkey_str)?;
 
     let slot = match svm.get_latest_block(id) {
