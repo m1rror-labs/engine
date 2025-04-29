@@ -212,7 +212,7 @@ pub async fn handle_request<T: Storage + Clone + 'static>(
         RpcMethod::GetFeeForMessage => Ok(serde_json::json!({
             "context": { "slot": 5068,"apiVersion":"2.1.13" }, "value": 5000
         })),
-        RpcMethod::GetFirstAvailableBlock => Ok(serde_json::json!(0)),
+        RpcMethod::GetFirstAvailableBlock => Ok(serde_json::json!(1)),
         RpcMethod::GetGenesisHash => get_genesis_hash(id, svm),
         RpcMethod::GetHealth => get_health(),
         RpcMethod::GetHighestSnapshotSlot => Err(serde_json::json!({
