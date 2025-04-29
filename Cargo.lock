@@ -517,6 +517,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eab1c04a571841102f5345a8fc0f6bb3d31c315dec879b5c6e42e40ce7ffa34e"
 
 [[package]]
+name = "assert_matches"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
+
+[[package]]
 name = "async-compression"
 version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2383,6 +2389,7 @@ dependencies = [
  "futures",
  "hex",
  "itertools 0.14.0",
+ "jsonrpc-core",
  "litesvm",
  "r2d2",
  "r2d2_redis",
@@ -2414,6 +2421,7 @@ dependencies = [
  "solana-svm",
  "solana-system-program",
  "solana-timings",
+ "solana-transaction-status",
  "solana-transaction-status-client-types",
  "solana-vote-program",
  "solana-zk-elgamal-proof-program",
@@ -4491,6 +4499,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "solana-transaction-status"
+version = "2.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aba18ead34f69642fc0bda6440a79b905feb4f7c22ace8e922e79d44eaa401fa"
+dependencies = [
+ "Inflector",
+ "base64 0.22.1",
+ "bincode",
+ "borsh 1.5.5",
+ "bs58",
+ "lazy_static",
+ "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "solana-account-decoder",
+ "solana-sdk",
+ "solana-transaction-status-client-types",
+ "spl-associated-token-account",
+ "spl-memo 5.0.0",
+ "spl-token 6.0.0",
+ "spl-token-2022 4.0.0",
+ "spl-token-group-interface 0.3.0",
+ "spl-token-metadata-interface 0.4.0",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "solana-transaction-status-client-types"
 version = "2.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4684,6 +4720,22 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+
+[[package]]
+name = "spl-associated-token-account"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68034596cf4804880d265f834af1ff2f821ad5293e41fa0f8f59086c181fc38e"
+dependencies = [
+ "assert_matches",
+ "borsh 1.5.5",
+ "num-derive",
+ "num-traits",
+ "solana-program",
+ "spl-token 6.0.0",
+ "spl-token-2022 4.0.0",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "spl-discriminator"

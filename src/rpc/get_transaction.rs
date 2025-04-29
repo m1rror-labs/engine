@@ -1,5 +1,17 @@
+use jsonrpc_core::Result as JsonResult;
 use serde_json::Value;
-use solana_sdk::{bs58, instruction::AccountMeta};
+use solana_rpc_client_api::{config::RpcTransactionConfig, custom_error::RpcCustomError};
+use solana_sdk::{
+    instruction::AccountMeta,
+    message::{v0::LoadedAddresses, VersionedMessage},
+    transaction::{TransactionError, VersionedTransaction},
+};
+use solana_transaction_status::{
+    ConfirmedTransactionWithStatusMeta, EncodedConfirmedTransactionWithStatusMeta,
+    InnerInstructions, TransactionStatusMeta, TransactionTokenBalance, TransactionWithStatusMeta,
+    UiTransactionEncoding, VersionedTransactionWithStatusMeta,
+};
+use solana_transaction_status_client_types::InnerInstruction;
 use uuid::Uuid;
 
 use crate::{
@@ -28,7 +40,6 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
             }));
         }
     };
-
     let signature = match parse_signature(sig_str) {
         Ok(signature) => signature,
         Err(e) => {
@@ -38,6 +49,22 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
             }));
         }
     };
+    let config: Option<RpcTransactionConfig> = req
+        .params
+        .as_ref()
+        .and_then(|params| params.get(1))
+        .and_then(|v| v.as_object())
+        .map(|map| serde_json::from_value(Value::Object(map.clone())))
+        .transpose()
+        .unwrap_or_default();
+    let RpcTransactionConfig {
+        encoding,
+        commitment,
+        max_supported_transaction_version,
+    } = config.unwrap_or_default();
+    _ = commitment;
+    _ = max_supported_transaction_version;
+    let encoding = encoding.unwrap_or(UiTransactionEncoding::Base64);
 
     let slot = match svm.get_latest_block(id) {
         Ok(slot) => slot,
@@ -49,57 +76,121 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
         }
     };
 
+    let encode_transaction =
+    |confirmed_tx_with_meta: ConfirmedTransactionWithStatusMeta| -> JsonResult<EncodedConfirmedTransactionWithStatusMeta> {
+        Ok(confirmed_tx_with_meta.encode(encoding, max_supported_transaction_version).map_err(RpcCustomError::from)?)
+    };
+
     match svm.get_transaction(id, &signature) {
-        Ok(transaction) => match transaction {
-            Some((transaction, tx_meta, status)) => {
-                let account_metas = transaction
-                    .message()
-                    .account_keys
-                    .iter()
-                    .enumerate()
-                    .map(|(idx, key)| AccountMeta {
-                        pubkey: key.to_owned(),
-                        is_signer: transaction.message().is_signer(idx),
-                        is_writable: transaction.message().is_maybe_writable(idx, None),
-                    })
-                    .collect::<Vec<AccountMeta>>();
-                Ok(serde_json::json!({
-                    "slot": slot.block_height,
-                        "blockTime": slot.block_time,
-                        "slot": status.slot,
-                        "meta": tx_meta,
-                        "transaction": {
-                            "message": {
-                                "accountKeys": account_metas.iter().map(|meta| {
-                                    serde_json::json!({
-                                        "pubkey": meta.pubkey.to_string(),
-                                        "signer": meta.is_signer,
-                                        "writable": meta.is_writable,
-                                        "source": "transaction",
-                                    })
-                                }).collect::<Vec<Value>>(),
-                                "instructions": transaction.message.instructions.iter().map(|instruction| {
-                                    let program_id = instruction.program_id(&transaction.message.account_keys);
-                                    let data_str = bs58::encode(&instruction.data).into_string();
-                                    serde_json::json!({
-                                        "accounts": instruction.accounts.iter().map(|idx| transaction.message.account_keys[*idx as usize].to_string()).collect::<Vec<String>>(),
-                                        "data": data_str,
-                                        "programId": program_id.to_string(),
-                                        "stackHeight":null,
-                                    })
-                                }).collect::<Vec<Value>>(),
-                                "recentBlockhash": transaction.message.recent_blockhash.to_string(),
+        Ok(transaction) => {
+            match transaction {
+                Some((transaction, tx_meta, status)) => {
+                    let versioned_message = VersionedMessage::Legacy(transaction.message().clone());
+                    let versioned_transaction = VersionedTransaction {
+                        message: versioned_message,
+                        signatures: transaction.signatures.clone(),
+                    };
+                    let status = match tx_meta.err {
+                        Some(err) => {
+                            Err(TransactionError::AccountNotFound) //TODO: This is bad
+                        }
+                        None => Ok(()),
+                    };
+                    let inner_ixs: Vec<InnerInstructions> = tx_meta
+                        .inner_instructions
+                        .clone()
+                        .iter()
+                        .enumerate()
+                        .map(|(inner_ix_index, inner_ix)| InnerInstructions {
+                            index: inner_ix_index as u8,
+                            instructions: inner_ix
+                                .iter()
+                                .map(|ix| InnerInstruction {
+                                    instruction: ix.instruction.clone(),
+                                    stack_height: Some(ix.stack_height.into()),
+                                })
+                                .collect(),
+                        })
+                        .collect();
+
+                    let confirmed_tx = ConfirmedTransactionWithStatusMeta {
+                        slot: slot.block_height,
+                        tx_with_meta: TransactionWithStatusMeta::Complete(
+                            VersionedTransactionWithStatusMeta {
+                                transaction: versioned_transaction,
+                                meta: TransactionStatusMeta {
+                                    status: status,
+                                    fee: tx_meta.fee,
+                                    pre_balances: tx_meta.pre_balances.clone(),
+                                    post_balances: tx_meta.post_balances.clone(),
+                                    inner_instructions: Some(inner_ixs),
+                                    log_messages: Some(tx_meta.log_messages.clone()),
+                                    pre_token_balances: tx_meta.pre_token_balances.clone().map(
+                                        |balances| {
+                                            balances
+                                                .into_iter()
+                                                .map(|b| TransactionTokenBalance {
+                                                    account_index: b.account_index,
+                                                    mint: b.mint,
+                                                    ui_token_amount: b.ui_token_amount,
+                                                    owner: b.owner,
+                                                    program_id: b.program_id,
+                                                })
+                                                .collect::<Vec<_>>()
+                                        },
+                                    ),
+                                    post_token_balances: tx_meta.post_token_balances.clone().map(
+                                        |balances| {
+                                            balances
+                                                .into_iter()
+                                                .map(|b| TransactionTokenBalance {
+                                                    account_index: b.account_index,
+                                                    mint: b.mint,
+                                                    ui_token_amount: b.ui_token_amount,
+                                                    owner: b.owner,
+                                                    program_id: b.program_id,
+                                                })
+                                                .collect::<Vec<_>>()
+                                        },
+                                    ),
+                                    rewards: None,
+                                    loaded_addresses: LoadedAddresses {
+                                        writable: vec![], //TODO
+                                        readonly: vec![], //TODO
+                                    },
+                                    return_data: None,
+                                    compute_units_consumed: Some(tx_meta.compute_units_consumed),
+                                },
                             },
-                            "signatures": transaction.signatures.iter().map(|signature| signature.to_string()).collect::<Vec<String>>(),
-                    },
-                    "version": "legacy", //TODO: versioning
-                }))
+                        ),
+                        block_time: None,
+                    };
+
+                    let account_metas = transaction
+                        .message()
+                        .account_keys
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, key)| AccountMeta {
+                            pubkey: key.to_owned(),
+                            is_signer: transaction.message().is_signer(idx),
+                            is_writable: transaction.message().is_maybe_writable(idx, None),
+                        })
+                        .collect::<Vec<AccountMeta>>();
+                    match encode_transaction(confirmed_tx) {
+                        Ok(encoded_tx) => Ok(serde_json::json!(encoded_tx)),
+                        Err(e) => Err(serde_json::json!({
+                            "code": -32002,
+                            "message": e.to_string(),
+                        })),
+                    }
+                }
+                None => Ok(serde_json::json!({
+                    "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
+                    "value": null,
+                })),
             }
-            None => Ok(serde_json::json!({
-                "context": { "slot": slot.block_height,"apiVersion":"2.1.13" },
-                "value": null,
-            })),
-        },
+        }
         Err(e) => Err(serde_json::json!({
             "code": -32002,
             "message": e,
