@@ -90,13 +90,14 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
                         message: versioned_message,
                         signatures: transaction.signatures.clone(),
                     };
-                    let status = match tx_meta.err {
+                    let status = match tx_meta.clone().err {
                         Some(err) => {
                             Err(TransactionError::AccountNotFound) //TODO: This is bad
                         }
                         None => Ok(()),
                     };
                     let inner_ixs: Vec<InnerInstructions> = tx_meta
+                        .clone()
                         .inner_instructions
                         .clone()
                         .iter()
@@ -178,7 +179,37 @@ pub fn get_transaction<T: Storage + Clone + 'static>(
                         })
                         .collect::<Vec<AccountMeta>>();
                     match encode_transaction(confirmed_tx) {
-                        Ok(encoded_tx) => Ok(serde_json::json!(encoded_tx)),
+                        Ok(encoded_tx) => {
+                            let mut val = serde_json::json!(encoded_tx);
+                            if let Some(obj) = val.as_object_mut() {
+                                let mut meta = obj
+                                    .get("meta")
+                                    .cloned()
+                                    .unwrap_or_else(|| serde_json::json!({}))
+                                    .as_object_mut()
+                                    .cloned()
+                                    .unwrap_or_default();
+
+                                // Remove the "err" field if it exists
+                                meta.remove("err");
+
+                                // Add the new "err" value
+                                meta.insert("err".to_string(), serde_json::json!(tx_meta.err));
+
+                                if tx_meta.err.is_some() {
+                                    meta.insert(
+                                        "status".to_string(),
+                                        serde_json::json!({
+                                            "Err": tx_meta.err.unwrap()
+                                        }),
+                                    );
+                                }
+
+                                // Reinsert the updated meta object into val
+                                obj.insert("meta".to_string(), serde_json::Value::Object(meta));
+                            }
+                            Ok(val)
+                        }
                         Err(e) => Err(serde_json::json!({
                             "code": -32002,
                             "message": e.to_string(),
